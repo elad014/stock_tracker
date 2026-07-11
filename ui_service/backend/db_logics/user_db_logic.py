@@ -3,6 +3,7 @@ import sys
 from typing import Optional
 from uuid import uuid4
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "utils"))
 
 from database_client import db

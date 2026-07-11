@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 
 from dotenv import load_dotenv
