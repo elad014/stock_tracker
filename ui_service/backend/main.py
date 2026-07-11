@@ -1,5 +1,8 @@
 import os
+import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from auth import router as auth_router
-from database import db
+from database_client import db
 
 app = FastAPI(title="Stock Tracker API")
 

@@ -42,3 +42,6 @@ class NeonClient:
         if self._pool:
             await self._pool.close()
             self._pool = None
+
+
+db = NeonClient()
