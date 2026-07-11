@@ -1,8 +1,11 @@
+import logging
 import os
 from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -40,15 +43,22 @@ class EmailClient:
         if text:
             payload["text"] = text
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                RESEND_API_URL,
-                headers=self._headers(),
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    RESEND_API_URL,
+                    headers=self._headers(),
+                    json=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            logger.error("Email send failed: %s %s", exc.response.status_code, exc.response.text)
+            raise
+        except httpx.RequestError as exc:
+            logger.error("Email service unreachable: %s", exc)
+            raise
 
     async def send_password_reset(self, to: str, reset_token: str) -> dict:
         subject = "Stock Tracker - Password Reset"
@@ -60,3 +70,6 @@ class EmailClient:
             "<p>If you did not request this, ignore this email.</p>"
         )
         return await self.send(to=to, subject=subject, html=html)
+
+
+mailer = EmailClient()

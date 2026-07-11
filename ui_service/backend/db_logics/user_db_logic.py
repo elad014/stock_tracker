@@ -1,7 +1,11 @@
+import os
+import sys
 from typing import Optional
 from uuid import uuid4
 
-from database import db
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "utils"))
+
+from database_client import db
 
 TABLE = "user_auth_data"
 

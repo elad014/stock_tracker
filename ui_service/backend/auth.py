@@ -1,14 +1,21 @@
+import logging
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status
 from jose import JWTError, jwt
 import bcrypt
+import httpx
+
+logger = logging.getLogger(__name__)
 
 from db_logics.user_db_logic import get_user_by_email, get_user_by_username, create_user, update_password
-from mailer import mailer
+from email_client import mailer
 from models import (
     LoginRequest,
     MessageResponse,
@@ -80,7 +87,14 @@ async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
     user = await get_user_by_email(req.email)
     if user:
         token = _create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
-        await mailer.send_password_reset(to=user["email"], reset_token=token)
+        try:
+            await mailer.send_password_reset(to=user["email"], reset_token=token)
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            logger.error("Failed to send password reset email to %s", req.email)
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Email service is not available right now, please try again later",
+            )
     return MessageResponse(message="If the email exists, a reset link has been sent")
 
 
