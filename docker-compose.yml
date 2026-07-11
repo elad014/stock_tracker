@@ -1,0 +1,14 @@
+services:
+  ui-service:
+    build:
+      context: ./ui_service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ui_service/backend/.env
+    volumes:
+      - ./utils:/app/utils:ro
+    environment:
+      - PYTHONPATH=/app/utils:/app/backend
+    restart: unless-stopped

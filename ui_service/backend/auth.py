@@ -1,0 +1,101 @@
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, HTTPException, status
+from jose import JWTError, jwt
+import bcrypt
+
+from db_logics.user_db_logic import get_user_by_email, get_user_by_username, create_user, update_password
+from mailer import mailer
+from models import (
+    LoginRequest,
+    MessageResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    RegisterRequest,
+    RegisterResponse,
+    Token,
+)
+
+load_dotenv()
+
+JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+RESET_TOKEN_EXPIRE_MINUTES = 15
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+def _create_token(data: dict, expires_minutes: int) -> str:
+    to_encode = data.copy()
+    to_encode["exp"] = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+async def register(req: RegisterRequest) -> RegisterResponse:
+    if await get_user_by_email(req.email):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+
+    if await get_user_by_username(req.user_name):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
+
+    user = await create_user(
+        user_name=req.user_name,
+        hashed_password=_hash_password(req.password),
+        email=req.email,
+        phone_number=req.phone_number,
+    )
+    return RegisterResponse(**user)
+
+
+@router.post("/login", response_model=Token)
+async def login(req: LoginRequest) -> Token:
+    user = await get_user_by_email(req.email)
+    if not user or not _verify_password(req.password, user["password"]):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = _create_token({"sub": user["email"]}, ACCESS_TOKEN_EXPIRE_MINUTES)
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@router.post("/password-reset-request", response_model=MessageResponse)
+async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
+    """Always returns success to avoid leaking whether email exists."""
+    user = await get_user_by_email(req.email)
+    if user:
+        token = _create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
+        await mailer.send_password_reset(to=user["email"], reset_token=token)
+    return MessageResponse(message="If the email exists, a reset link has been sent")
+
+
+@router.post("/password-reset-confirm", response_model=MessageResponse)
+async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:
+    try:
+        payload = jwt.decode(req.token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "reset":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
+        email: Optional[str] = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset token")
+
+    if not email or not await get_user_by_email(email):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
+
+    await update_password(email, _hash_password(req.new_password))
+    return MessageResponse(message="Password has been reset successfully")

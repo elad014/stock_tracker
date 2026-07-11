@@ -1,0 +1,62 @@
+import os
+from typing import Optional
+
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
+
+RESEND_API_URL = "https://api.resend.com/emails"
+
+
+class EmailClient:
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        from_address: Optional[str] = None,
+    ) -> None:
+        self._api_key = api_key or os.getenv("RESEND_API_KEY", "")
+        self._from_address = from_address or os.getenv("EMAIL_FROM", "noreply@yourdomain.com")
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+    async def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        text: Optional[str] = None,
+    ) -> dict:
+        payload: dict = {
+            "from": self._from_address,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        }
+        if text:
+            payload["text"] = text
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                RESEND_API_URL,
+                headers=self._headers(),
+                json=payload,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def send_password_reset(self, to: str, reset_token: str) -> dict:
+        subject = "Stock Tracker - Password Reset"
+        html = (
+            "<h2>Password Reset Request</h2>"
+            "<p>You requested a password reset. Use the token below to reset your password:</p>"
+            f"<p style='font-size:18px;font-weight:bold;background:#f0f2f5;padding:12px;border-radius:8px;'>{reset_token}</p>"
+            "<p>This token expires in 15 minutes.</p>"
+            "<p>If you did not request this, ignore this email.</p>"
+        )
+        return await self.send(to=to, subject=subject, html=html)
