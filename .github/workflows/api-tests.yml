@@ -1,4 +1,4 @@
-name: API Tests
+name: Stock Tracker Tests
 
 on:
   push:
@@ -11,6 +11,18 @@ jobs:
     steps:
       - name: Download project
         uses: actions/checkout@v4
+
+      - name: Create backend .env file
+        shell: bash
+        run: |
+          mkdir -p ui_service/backend
+
+          cat <<EOF > ui_service/backend/.env
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          EOF
 
       - name: Start application with Docker
         run: docker compose up --build -d
