@@ -30,6 +30,7 @@ export default function LoginPage(): JSX.Element {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <Link to="/" className="btn-back-home">Back to home</Link>
         <h1>Welcome back</h1>
         <p className="subtitle">Sign in to your Stock Tracker account</p>
 

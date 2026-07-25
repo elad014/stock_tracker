@@ -55,6 +55,7 @@ export default function RecoveryPage(): JSX.Element {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <Link to="/" className="btn-back-home">Back to home</Link>
         <h1>Reset password</h1>
         {step !== "done" && (
           <p className="subtitle">
