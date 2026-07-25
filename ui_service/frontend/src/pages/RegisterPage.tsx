@@ -53,6 +53,7 @@ export default function RegisterPage(): JSX.Element {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <Link to="/" className="btn-back-home">Back to home</Link>
         <h1>Create account</h1>
         <p className="subtitle">Join Stock Tracker to manage your portfolio</p>
 
