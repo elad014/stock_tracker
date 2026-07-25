@@ -38,6 +38,21 @@ async def get_watchlist(user_id: str) -> list[dict[str, Any]]:
     return [_normalize_stock(row) for row in rows]
 
 
+async def list_stocks() -> list[dict[str, Any]]:
+    rows = await db.fetch_all(
+        f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} ORDER BY name"
+    )
+    return [_normalize_stock(row) for row in rows]
+
+
+async def get_stock_by_id(stock_id: str) -> Optional[dict[str, Any]]:
+    row = await db.fetch_one(
+        f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} WHERE id = $1",
+        stock_id,
+    )
+    return _normalize_stock(row) if row else None
+
+
 async def get_stock_by_name(name: str) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
         f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} WHERE name = $1",
@@ -56,6 +71,10 @@ async def create_stock(name: str) -> dict[str, Any]:
         None,
     )
     return {"id": stock_id, "name": name, "price": None, "trend": None}
+
+
+async def delete_stock(stock_id: str) -> str:
+    return await db.execute(f"DELETE FROM {STOCKS_TABLE} WHERE id = $1", stock_id)
 
 
 async def is_on_watchlist(user_id: str, stock_id: str) -> bool:
@@ -81,3 +100,11 @@ async def remove_from_watchlist(user_id: str, stock_id: str) -> str:
         user_id,
         stock_id,
     )
+
+
+async def delete_watchlist_for_user(user_id: str) -> None:
+    await db.execute(f"DELETE FROM {WATCHLIST_TABLE} WHERE user_id = $1", user_id)
+
+
+async def delete_watchlist_for_stock(stock_id: str) -> None:
+    await db.execute(f"DELETE FROM {WATCHLIST_TABLE} WHERE stock_id = $1", stock_id)
