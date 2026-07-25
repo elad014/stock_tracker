@@ -1,12 +1,12 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-type Stock = {
-  symbol: string;
-  name: string;
-  price: number;
-  changePct: number;
-};
+import {
+  addWatchlistStock,
+  fetchWatchlist,
+  removeWatchlistStock,
+  WatchlistStock,
+} from "../api/watchlist";
 
 type NewsItem = {
   id: string;
@@ -20,12 +20,6 @@ type ChatMessage = {
   role: "user" | "assistant";
   text: string;
 };
-
-const INITIAL_STOCKS: Stock[] = [
-  { symbol: "AAPL", name: "Apple Inc.", price: 214.32, changePct: 1.24 },
-  { symbol: "MSFT", name: "Microsoft Corp.", price: 428.15, changePct: -0.42 },
-  { symbol: "TSLA", name: "Tesla Inc.", price: 248.9, changePct: 2.18 },
-];
 
 const MOCK_NEWS: NewsItem[] = [
   {
@@ -54,34 +48,28 @@ const MOCK_NEWS: NewsItem[] = [
   },
 ];
 
-const KNOWN_NAMES: Record<string, string> = {
-  AAPL: "Apple Inc.",
-  MSFT: "Microsoft Corp.",
-  TSLA: "Tesla Inc.",
-  GOOGL: "Alphabet Inc.",
-  AMZN: "Amazon.com Inc.",
-  NVDA: "NVIDIA Corp.",
-  META: "Meta Platforms Inc.",
-};
+function formatPrice(price: number | null): string {
+  if (price === null || price === undefined) {
+    return "—";
+  }
+  return `$${Number(price).toFixed(2)}`;
+}
 
-function createMockStock(symbol: string): Stock {
-  const upper: string = symbol.toUpperCase();
-  const price: number = Math.round((50 + Math.random() * 450) * 100) / 100;
-  const changePct: number = Math.round((Math.random() * 6 - 3) * 100) / 100;
-  return {
-    symbol: upper,
-    name: KNOWN_NAMES[upper] ?? `${upper} Holdings`,
-    price,
-    changePct,
-  };
+function formatTrend(trend: string | number | null): string {
+  if (trend === null || trend === undefined || trend === "") {
+    return "—";
+  }
+  return String(trend);
 }
 
 export default function DashboardPage(): JSX.Element {
   const navigate = useNavigate();
-  const [stocks, setStocks] = useState<Stock[]>(INITIAL_STOCKS);
+  const [stocks, setStocks] = useState<WatchlistStock[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [newTicker, setNewTicker] = useState<string>("");
-  const [removeSymbol, setRemoveSymbol] = useState<string>("");
+  const [removeStockId, setRemoveStockId] = useState<string>("");
   const [addError, setAddError] = useState<string>("");
+  const [listError, setListError] = useState<string>("");
   const [chatOpen, setChatOpen] = useState<boolean>(false);
   const [chatInput, setChatInput] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -92,12 +80,33 @@ export default function DashboardPage(): JSX.Element {
     },
   ]);
 
+  async function loadWatchlist(): Promise<void> {
+    setListError("");
+    try {
+      const data = await fetchWatchlist();
+      setStocks(data);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+        return;
+      }
+      setListError(err.response?.data?.detail ?? "Failed to load watchlist");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadWatchlist();
+  }, []);
+
   function handleLogout(): void {
     localStorage.removeItem("access_token");
     navigate("/");
   }
 
-  function handleAddStock(e: FormEvent): void {
+  async function handleAddStock(e: FormEvent): Promise<void> {
     e.preventDefault();
     setAddError("");
     const ticker: string = newTicker.trim().toUpperCase();
@@ -109,24 +118,28 @@ export default function DashboardPage(): JSX.Element {
       setAddError("Use 1–5 letters only");
       return;
     }
-    if (stocks.some((s: Stock) => s.symbol === ticker)) {
-      setAddError("You already follow this stock");
-      return;
-    }
-    setStocks((prev: Stock[]) => [...prev, createMockStock(ticker)]);
-    setNewTicker("");
-    if (!removeSymbol) {
-      setRemoveSymbol(ticker);
+
+    try {
+      await addWatchlistStock(ticker);
+      setNewTicker("");
+      await loadWatchlist();
+    } catch (err: any) {
+      setAddError(err.response?.data?.detail ?? "Failed to add stock");
     }
   }
 
-  function handleRemoveStock(e: FormEvent): void {
+  async function handleRemoveStock(e: FormEvent): Promise<void> {
     e.preventDefault();
-    if (!removeSymbol) {
+    if (!removeStockId) {
       return;
     }
-    setStocks((prev: Stock[]) => prev.filter((s: Stock) => s.symbol !== removeSymbol));
-    setRemoveSymbol("");
+    try {
+      await removeWatchlistStock(removeStockId);
+      setRemoveStockId("");
+      await loadWatchlist();
+    } catch (err: any) {
+      setAddError(err.response?.data?.detail ?? "Failed to remove stock");
+    }
   }
 
   function handleSendChat(e: FormEvent): void {
@@ -151,7 +164,7 @@ export default function DashboardPage(): JSX.Element {
 
   const visibleNews: NewsItem[] = MOCK_NEWS.filter(
     (item: NewsItem) =>
-      stocks.length === 0 || stocks.some((s: Stock) => s.symbol === item.relatedSymbol),
+      stocks.length === 0 || stocks.some((s: WatchlistStock) => s.name === item.relatedSymbol),
   );
 
   return (
@@ -191,20 +204,20 @@ export default function DashboardPage(): JSX.Element {
               <div className="stock-control-row">
                 <select
                   id="remove-ticker"
-                  value={removeSymbol}
-                  onChange={(e) => setRemoveSymbol(e.target.value)}
+                  value={removeStockId}
+                  onChange={(e) => setRemoveStockId(e.target.value)}
                 >
                   <option value="">Select a stock</option>
-                  {stocks.map((stock: Stock) => (
-                    <option key={stock.symbol} value={stock.symbol}>
-                      {stock.symbol}
+                  {stocks.map((stock: WatchlistStock) => (
+                    <option key={stock.id} value={stock.id}>
+                      {stock.name}
                     </option>
                   ))}
                 </select>
                 <button
                   type="submit"
                   className="btn-outline btn-compact"
-                  disabled={!removeSymbol}
+                  disabled={!removeStockId}
                 >
                   Remove
                 </button>
@@ -212,33 +225,36 @@ export default function DashboardPage(): JSX.Element {
             </form>
           </div>
 
+          {listError && <p className="control-error">{listError}</p>}
+
           <div className="table-wrap">
             <table className="stocks-table">
               <thead>
                 <tr>
                   <th>Symbol</th>
-                  <th>Name</th>
                   <th>Price</th>
-                  <th>Change %</th>
+                  <th>Trend</th>
                 </tr>
               </thead>
               <tbody>
-                {stocks.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={4} className="empty-cell">
+                    <td colSpan={3} className="empty-cell">
+                      Loading watchlist...
+                    </td>
+                  </tr>
+                ) : stocks.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="empty-cell">
                       No stocks followed yet. Add a ticker above.
                     </td>
                   </tr>
                 ) : (
-                  stocks.map((stock: Stock) => (
-                    <tr key={stock.symbol}>
-                      <td className="symbol-cell">{stock.symbol}</td>
-                      <td>{stock.name}</td>
-                      <td>${stock.price.toFixed(2)}</td>
-                      <td className={stock.changePct >= 0 ? "change-up" : "change-down"}>
-                        {stock.changePct >= 0 ? "+" : ""}
-                        {stock.changePct.toFixed(2)}%
-                      </td>
+                  stocks.map((stock: WatchlistStock) => (
+                    <tr key={stock.id}>
+                      <td className="symbol-cell">{stock.name}</td>
+                      <td>{formatPrice(stock.price)}</td>
+                      <td>{formatTrend(stock.trend)}</td>
                     </tr>
                   ))
                 )}

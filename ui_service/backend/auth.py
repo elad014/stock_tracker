@@ -78,7 +78,10 @@ async def login(req: LoginRequest) -> Token:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = _create_token({"sub": user["email"]}, ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = _create_token(
+        {"sub": user["email"], "user_id": str(user["id"])},
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+    )
     return Token(access_token=access_token, token_type="bearer")
 
 
