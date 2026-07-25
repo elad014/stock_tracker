@@ -6,6 +6,7 @@ export default function HomePage(): JSX.Element {
       <nav className="home-nav">
         <span className="home-logo">Stock Tracker</span>
         <div className="home-nav-actions">
+          <Link to="/help" className="btn-outline">Help</Link>
           <Link to="/login" className="btn-outline">Log in</Link>
           <Link to="/register" className="btn-solid">Sign up</Link>
         </div>

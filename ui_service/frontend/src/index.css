@@ -337,3 +337,110 @@ body {
     align-items: center;
   }
 }
+
+/* ---- Help page ---- */
+
+.help-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f1f5f9;
+}
+
+.help-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2.5rem;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.help-logo {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+  text-decoration: none;
+}
+
+.help-nav-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.help-content {
+  flex: 1;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.help-content h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.5px;
+}
+
+.help-intro {
+  color: #94a3b8;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 2.5rem;
+}
+
+.help-section {
+  margin-bottom: 2rem;
+}
+
+.help-section h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: #e2e8f0;
+}
+
+.help-section p,
+.help-section li {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.help-section ol,
+.help-section ul {
+  padding-left: 1.25rem;
+}
+
+.help-section li {
+  margin-bottom: 0.5rem;
+}
+
+.help-section strong {
+  color: #e2e8f0;
+}
+
+.help-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .help-nav {
+    padding: 1rem 1.25rem;
+  }
+
+  .help-content h1 {
+    font-size: 1.75rem;
+  }
+
+  .help-actions {
+    flex-direction: column;
+  }
+}
