@@ -18,7 +18,7 @@ export default function LoginPage(): JSX.Element {
     try {
       const data = await loginUser({ email, password });
       localStorage.setItem("access_token", data.access_token);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? "Login failed";
       setError(msg);
