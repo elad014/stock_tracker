@@ -34,6 +34,13 @@ async def get_user_by_username(user_name: str) -> Optional[dict]:
     )
 
 
+async def get_user_by_phone(phone_number: str) -> Optional[dict]:
+    return await db.fetch_one(
+        f"SELECT id, user_name, password, email, phone_number FROM {TABLE} WHERE phone_number = $1",
+        phone_number,
+    )
+
+
 async def get_user_by_id(user_id: str) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
         f"SELECT id, user_name, email, phone_number FROM {TABLE} WHERE id = $1",
