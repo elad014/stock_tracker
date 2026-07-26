@@ -32,14 +32,18 @@ def _hash_password(password: str) -> str:
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
     stocks = await watchlist_db.get_watchlist(user["id"])
     admin_value: str | None = user.get("admin")
+    lock_value: str | None = user.get("lock")
     if admin_value is not None:
         admin_value = str(admin_value)
+    if lock_value is not None:
+        lock_value = str(lock_value)
     return AdminUser(
         id=str(user["id"]),
         user_name=user["user_name"],
         email=user["email"],
         phone_number=user["phone_number"],
         admin=admin_value if user_db.is_admin_role(admin_value) else None,
+        lock=lock_value if user_db.is_user_locked(lock_value) else None,
         followed_stocks=[WatchlistStock(**s) for s in stocks],
     )
 
@@ -65,6 +69,7 @@ async def create_user(req: AdminCreateUserRequest) -> AdminUser:
         email=req.email,
         phone_number=req.phone_number,
         admin=req.admin,
+        lock=req.lock,
     )
     return await _user_with_stocks(user)
 
@@ -94,6 +99,8 @@ async def update_user(user_id: str, req: AdminUpdateUserRequest) -> AdminUser:
     }
     if "admin" in req.model_fields_set:
         update_kwargs["admin"] = req.admin
+    if "lock" in req.model_fields_set:
+        update_kwargs["lock"] = req.lock
 
     await user_db.update_user_fields(user_id, **update_kwargs)
 
@@ -123,6 +130,16 @@ async def remove_user_admin(user_id: str) -> MessageResponse:
 
     await user_db.update_user_fields(user_id, admin=None)
     return MessageResponse(message="Admin role removed")
+
+
+@router.delete("/users/{user_id}/lock", response_model=MessageResponse)
+async def remove_user_lock(user_id: str) -> MessageResponse:
+    existing = await user_db.get_user_by_id(user_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    await user_db.update_user_fields(user_id, lock=None)
+    return MessageResponse(message="Lock removed")
 
 
 @router.delete("/users/{user_id}", response_model=MessageResponse)

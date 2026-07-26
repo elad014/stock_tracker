@@ -14,6 +14,7 @@ import {
   fetchAdminUsers,
   removeStockFromUser,
   removeUserAdminRole,
+  removeUserLock,
   setAdminUserPassword,
   updateAdminUser,
 } from "../api/admin";
@@ -52,6 +53,7 @@ export default function AdminPage(): JSX.Element {
   const [newUserPhone, setNewUserPhone] = useState<string>("");
   const [newUserPassword, setNewUserPassword] = useState<string>("");
   const [newUserAdmin, setNewUserAdmin] = useState<string>("");
+  const [newUserLock, setNewUserLock] = useState<string>("");
   const [userFormError, setUserFormError] = useState<string>("");
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export default function AdminPage(): JSX.Element {
   const [editEmail, setEditEmail] = useState<string>("");
   const [editPhone, setEditPhone] = useState<string>("");
   const [editAdmin, setEditAdmin] = useState<string>("");
+  const [editLock, setEditLock] = useState<string>("");
   const [editError, setEditError] = useState<string>("");
 
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
@@ -99,8 +102,13 @@ export default function AdminPage(): JSX.Element {
     event.preventDefault();
     setUserFormError("");
     const adminValue: string = newUserAdmin.trim().toLowerCase();
+    const lockValue: string = newUserLock.trim().toLowerCase();
     if (adminValue && adminValue !== "admin") {
       setUserFormError("Admin field must be empty or 'admin'");
+      return;
+    }
+    if (lockValue && lockValue !== "lock") {
+      setUserFormError("Lock field must be empty or code_lock");
       return;
     }
     try {
@@ -110,12 +118,14 @@ export default function AdminPage(): JSX.Element {
         phone_number: newUserPhone.trim(),
         password: newUserPassword,
         admin: adminValue || undefined,
+        lock: lockValue || undefined,
       });
       setNewUserName("");
       setNewUserEmail("");
       setNewUserPhone("");
       setNewUserPassword("");
       setNewUserAdmin("");
+      setNewUserLock("");
       await loadAll();
     } catch (err: unknown) {
       setUserFormError(errorMessage(err));
@@ -129,6 +139,7 @@ export default function AdminPage(): JSX.Element {
     setEditEmail(user.email);
     setEditPhone(user.phone_number);
     setEditAdmin("");
+    setEditLock("");
     setEditError("");
   }
 
@@ -144,8 +155,13 @@ export default function AdminPage(): JSX.Element {
     }
     setEditError("");
     const adminValue: string = editAdmin.trim().toLowerCase();
+    const lockValue: string = editLock.trim().toLowerCase();
     if (adminValue && adminValue !== "admin") {
       setEditError("Admin field must be empty or admin_code");
+      return;
+    }
+    if (lockValue && lockValue !== "lock") {
+      setEditError("Lock field must be empty or code_lock");
       return;
     }
     try {
@@ -154,6 +170,7 @@ export default function AdminPage(): JSX.Element {
         email: string;
         phone_number: string;
         admin?: string | null;
+        lock?: string | null;
       } = {
         user_name: editUserName.trim(),
         email: editEmail.trim(),
@@ -161,6 +178,9 @@ export default function AdminPage(): JSX.Element {
       };
       if (adminValue) {
         payload.admin = adminValue;
+      }
+      if (lockValue) {
+        payload.lock = lockValue;
       }
       await updateAdminUser(editingUserId, payload);
       setEditingUserId(null);
@@ -248,6 +268,16 @@ export default function AdminPage(): JSX.Element {
     setPageError("");
     try {
       await removeUserAdminRole(userId);
+      await loadAll();
+    } catch (err: unknown) {
+      setPageError(errorMessage(err));
+    }
+  }
+
+  async function handleRemoveLock(userId: string): Promise<void> {
+    setPageError("");
+    try {
+      await removeUserLock(userId);
       await loadAll();
     } catch (err: unknown) {
       setPageError(errorMessage(err));
@@ -358,8 +388,16 @@ export default function AdminPage(): JSX.Element {
             />
             <input
               type="text"
+              placeholder="Role"
               value={newUserAdmin}
               onChange={(e) => setNewUserAdmin(e.target.value)}
+              autoComplete="off"
+            />
+            <input
+              type="text"
+              placeholder="Status"
+              value={newUserLock}
+              onChange={(e) => setNewUserLock(e.target.value)}
               autoComplete="off"
             />
             <button type="submit" className="btn-primary">
@@ -376,6 +414,7 @@ export default function AdminPage(): JSX.Element {
                   <th>Email</th>
                   <th>Phone</th>
                   <th>Role</th>
+                  <th>Status</th>
                   <th>Followed stocks</th>
                   <th>Actions</th>
                 </tr>
@@ -387,6 +426,7 @@ export default function AdminPage(): JSX.Element {
                     <td>{user.email}</td>
                     <td>{user.phone_number}</td>
                     <td>{user.admin === "admin" ? "admin" : "user"}</td>
+                    <td>{user.lock === "lock" ? "locked" : "active"}</td>
                     <td>
                       <div className="admin-stock-tags">
                         {user.followed_stocks.length === 0 ? (
@@ -460,6 +500,15 @@ export default function AdminPage(): JSX.Element {
                             Remove admin
                           </button>
                         ) : null}
+                        {user.lock === "lock" ? (
+                          <button
+                            type="button"
+                            className="btn-outline admin-btn-sm"
+                            onClick={() => void handleRemoveLock(user.id)}
+                          >
+                            Remove lock
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-outline admin-btn-sm"
@@ -501,8 +550,16 @@ export default function AdminPage(): JSX.Element {
               />
               <input
                 type="text"
+                placeholder="Role"
                 value={editAdmin}
                 onChange={(e) => setEditAdmin(e.target.value)}
+                autoComplete="off"
+              />
+              <input
+                type="text"
+                placeholder="Status"
+                value={editLock}
+                onChange={(e) => setEditLock(e.target.value)}
                 autoComplete="off"
               />
               <div className="admin-actions">

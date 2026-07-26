@@ -13,6 +13,7 @@ export interface AdminUser {
   email: string;
   phone_number: string;
   admin?: string | null;
+  lock?: string | null;
   followed_stocks: AdminStock[];
 }
 
@@ -22,6 +23,7 @@ export interface RegisterUserPayload {
   password: string;
   phone_number: string;
   admin?: string;
+  lock?: string;
 }
 
 export interface UpdateUserPayload {
@@ -29,6 +31,7 @@ export interface UpdateUserPayload {
   email: string;
   phone_number: string;
   admin?: string | null;
+  lock?: string | null;
 }
 
 const api = axios.create({ baseURL: "/admin" });
@@ -71,6 +74,11 @@ export async function setAdminUserPassword(
 
 export async function removeUserAdminRole(userId: string): Promise<string> {
   const res = await api.delete<{ message: string }>(`/users/${userId}/admin`);
+  return res.data.message;
+}
+
+export async function removeUserLock(userId: string): Promise<string> {
+  const res = await api.delete<{ message: string }>(`/users/${userId}/lock`);
   return res.data.message;
 }
 

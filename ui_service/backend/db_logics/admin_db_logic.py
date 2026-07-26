@@ -13,7 +13,7 @@ USERS_TABLE = "user_auth_data"
 async def list_users() -> list[dict[str, Any]]:
     rows = await db.fetch_all(
         f"""
-        SELECT id, user_name, email, phone_number, admin
+        SELECT id, user_name, email, phone_number, admin, lock
         FROM {USERS_TABLE}
         ORDER BY user_name
         """
@@ -25,6 +25,7 @@ async def list_users() -> list[dict[str, Any]]:
             "email": row["email"],
             "phone_number": row["phone_number"],
             "admin": row.get("admin"),
+            "lock": row.get("lock"),
         }
         for row in rows
     ]

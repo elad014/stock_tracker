@@ -35,6 +35,19 @@ def _normalize_admin_role(value: object) -> Optional[str]:
     return None
 
 
+def _normalize_lock_status(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized == "lock":
+            return "lock"
+        raise ValueError("Lock field must be empty or 'lock'")
+    return None
+
+
 class RegisterRequest(BaseModel):
     user_name: str
     email: EmailStr
@@ -160,6 +173,7 @@ class AdminUser(BaseModel):
     email: str
     phone_number: str
     admin: Optional[str] = None
+    lock: Optional[str] = None
     followed_stocks: list[WatchlistStock] = []
 
 
@@ -173,6 +187,7 @@ class AdminCreateUserRequest(BaseModel):
     password: str
     phone_number: str
     admin: Optional[str] = None
+    lock: Optional[str] = None
 
     @field_validator("password")
     @classmethod
@@ -189,12 +204,18 @@ class AdminCreateUserRequest(BaseModel):
     def normalize_admin(cls, v: object) -> object:
         return _normalize_admin_role(v)
 
+    @field_validator("lock", mode="before")
+    @classmethod
+    def normalize_lock(cls, v: object) -> object:
+        return _normalize_lock_status(v)
+
 
 class AdminUpdateUserRequest(BaseModel):
     user_name: str
     email: EmailStr
     phone_number: str
     admin: Optional[str] = None
+    lock: Optional[str] = None
 
     @field_validator("user_name")
     @classmethod
@@ -205,6 +226,11 @@ class AdminUpdateUserRequest(BaseModel):
     @classmethod
     def normalize_admin(cls, v: object) -> object:
         return _normalize_admin_role(v)
+
+    @field_validator("lock", mode="before")
+    @classmethod
+    def normalize_lock(cls, v: object) -> object:
+        return _normalize_lock_status(v)
 
 
 class AdminSetPasswordRequest(BaseModel):
