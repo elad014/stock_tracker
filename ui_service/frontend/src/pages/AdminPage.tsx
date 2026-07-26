@@ -13,6 +13,7 @@ import {
   fetchAdminStocks,
   fetchAdminUsers,
   removeStockFromUser,
+  removeUserAdminRole,
   setAdminUserPassword,
   updateAdminUser,
 } from "../api/admin";
@@ -57,6 +58,7 @@ export default function AdminPage(): JSX.Element {
   const [editUserName, setEditUserName] = useState<string>("");
   const [editEmail, setEditEmail] = useState<string>("");
   const [editPhone, setEditPhone] = useState<string>("");
+  const [editAdmin, setEditAdmin] = useState<string>("");
   const [editError, setEditError] = useState<string>("");
 
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export default function AdminPage(): JSX.Element {
     setEditUserName(user.user_name);
     setEditEmail(user.email);
     setEditPhone(user.phone_number);
+    setEditAdmin("");
     setEditError("");
   }
 
@@ -140,12 +143,26 @@ export default function AdminPage(): JSX.Element {
       return;
     }
     setEditError("");
+    const adminValue: string = editAdmin.trim().toLowerCase();
+    if (adminValue && adminValue !== "admin") {
+      setEditError("Admin field must be empty or admin_code");
+      return;
+    }
     try {
-      await updateAdminUser(editingUserId, {
+      const payload: {
+        user_name: string;
+        email: string;
+        phone_number: string;
+        admin?: string | null;
+      } = {
         user_name: editUserName.trim(),
         email: editEmail.trim(),
         phone_number: editPhone.trim(),
-      });
+      };
+      if (adminValue) {
+        payload.admin = adminValue;
+      }
+      await updateAdminUser(editingUserId, payload);
       setEditingUserId(null);
       await loadAll();
     } catch (err: unknown) {
@@ -221,6 +238,16 @@ export default function AdminPage(): JSX.Element {
       if (passwordUserId === userId) {
         setPasswordUserId(null);
       }
+      await loadAll();
+    } catch (err: unknown) {
+      setPageError(errorMessage(err));
+    }
+  }
+
+  async function handleRemoveAdmin(userId: string): Promise<void> {
+    setPageError("");
+    try {
+      await removeUserAdminRole(userId);
       await loadAll();
     } catch (err: unknown) {
       setPageError(errorMessage(err));
@@ -331,9 +358,9 @@ export default function AdminPage(): JSX.Element {
             />
             <input
               type="text"
-              placeholder="Admin (leave empty or type admin)"
               value={newUserAdmin}
               onChange={(e) => setNewUserAdmin(e.target.value)}
+              autoComplete="off"
             />
             <button type="submit" className="btn-primary">
               Add user
@@ -348,6 +375,7 @@ export default function AdminPage(): JSX.Element {
                   <th>Username</th>
                   <th>Email</th>
                   <th>Phone</th>
+                  <th>Role</th>
                   <th>Followed stocks</th>
                   <th>Actions</th>
                 </tr>
@@ -358,6 +386,7 @@ export default function AdminPage(): JSX.Element {
                     <td>{user.user_name}</td>
                     <td>{user.email}</td>
                     <td>{user.phone_number}</td>
+                    <td>{user.admin === "admin" ? "admin" : "user"}</td>
                     <td>
                       <div className="admin-stock-tags">
                         {user.followed_stocks.length === 0 ? (
@@ -422,6 +451,15 @@ export default function AdminPage(): JSX.Element {
                         >
                           Set password
                         </button>
+                        {user.admin === "admin" ? (
+                          <button
+                            type="button"
+                            className="btn-outline admin-btn-sm"
+                            onClick={() => void handleRemoveAdmin(user.id)}
+                          >
+                            Remove admin
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-outline admin-btn-sm"
@@ -460,6 +498,12 @@ export default function AdminPage(): JSX.Element {
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value)}
                 required
+              />
+              <input
+                type="text"
+                value={editAdmin}
+                onChange={(e) => setEditAdmin(e.target.value)}
+                autoComplete="off"
               />
               <div className="admin-actions">
                 <button type="submit" className="btn-primary">

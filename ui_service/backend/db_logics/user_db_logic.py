@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "ut
 from database_client import db
 
 TABLE = "user_auth_data"
+_UNSET: Any = object()
 
 
 def is_admin_role(admin_value: Any) -> bool:
@@ -133,6 +134,7 @@ async def update_user_fields(
     email: Optional[str] = None,
     phone_number: Optional[str] = None,
     hashed_password: Optional[str] = None,
+    admin: Any = _UNSET,
 ) -> None:
     sets: list[str] = []
     args: list[Any] = []
@@ -149,6 +151,9 @@ async def update_user_fields(
     if hashed_password is not None:
         args.append(hashed_password)
         sets.append(f"password = ${len(args)}")
+    if admin is not _UNSET:
+        args.append(admin)
+        sets.append(f"admin = ${len(args)}")
 
     if not sets:
         return

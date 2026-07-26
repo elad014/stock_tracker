@@ -31,11 +31,15 @@ def _hash_password(password: str) -> str:
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
     stocks = await watchlist_db.get_watchlist(user["id"])
+    admin_value: str | None = user.get("admin")
+    if admin_value is not None:
+        admin_value = str(admin_value)
     return AdminUser(
         id=str(user["id"]),
         user_name=user["user_name"],
         email=user["email"],
         phone_number=user["phone_number"],
+        admin=admin_value if user_db.is_admin_role(admin_value) else None,
         followed_stocks=[WatchlistStock(**s) for s in stocks],
     )
 
@@ -83,12 +87,15 @@ async def update_user(user_id: str, req: AdminUpdateUserRequest) -> AdminUser:
     if phone_owner and str(phone_owner["id"]) != user_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
 
-    await user_db.update_user_fields(
-        user_id,
-        user_name=req.user_name,
-        email=req.email,
-        phone_number=req.phone_number,
-    )
+    update_kwargs: dict[str, Any] = {
+        "user_name": req.user_name,
+        "email": req.email,
+        "phone_number": req.phone_number,
+    }
+    if "admin" in req.model_fields_set:
+        update_kwargs["admin"] = req.admin
+
+    await user_db.update_user_fields(user_id, **update_kwargs)
 
     updated = await user_db.get_user_by_id(user_id)
     assert updated is not None
@@ -106,6 +113,16 @@ async def set_user_password(user_id: str, req: AdminSetPasswordRequest) -> Messa
         hashed_password=_hash_password(req.new_password),
     )
     return MessageResponse(message="Password updated")
+
+
+@router.delete("/users/{user_id}/admin", response_model=MessageResponse)
+async def remove_user_admin(user_id: str) -> MessageResponse:
+    existing = await user_db.get_user_by_id(user_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    await user_db.update_user_fields(user_id, admin=None)
+    return MessageResponse(message="Admin role removed")
 
 
 @router.delete("/users/{user_id}", response_model=MessageResponse)
