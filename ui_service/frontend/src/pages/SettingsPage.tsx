@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { fetchCurrentUser, updateCurrentUser, UpdateSettingsPayload } from "../api/auth";
@@ -11,11 +11,15 @@ function formatApiError(err: any): string {
   if (Array.isArray(detail)) {
     return detail.map((item: { msg?: string }) => item.msg ?? "Invalid input").join(", ");
   }
+  if (typeof err.message === "string" && err.message) {
+    return err.message;
+  }
   return "Failed to save settings";
 }
 
 export default function SettingsPage(): JSX.Element {
   const navigate = useNavigate();
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const [currentEmail, setCurrentEmail] = useState<string>("");
   const [currentPhone, setCurrentPhone] = useState<string>("");
@@ -30,6 +34,12 @@ export default function SettingsPage(): JSX.Element {
   const [loadError, setLoadError] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
+
+  useEffect(() => {
+    if ((error || success) && feedbackRef.current) {
+      feedbackRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [error, success]);
 
   useEffect(() => {
     async function loadUser(): Promise<void> {
@@ -177,9 +187,6 @@ export default function SettingsPage(): JSX.Element {
 
           {!loading && !loadError ? (
             <form className="settings-form" onSubmit={handleSubmit}>
-              {error ? <div className="error-msg">{error}</div> : null}
-              {success ? <div className="success-msg">{success}</div> : null}
-
               <div className="settings-field-section">
                 <h2 className="settings-section-title">Username</h2>
                 <p className="settings-current-value">{currentUserName}</p>
@@ -263,6 +270,11 @@ export default function SettingsPage(): JSX.Element {
                     placeholder="Repeat new password"
                   />
                 </div>
+              </div>
+
+              <div ref={feedbackRef} className="settings-feedback">
+                {error ? <div className="error-msg">{error}</div> : null}
+                {success ? <div className="success-msg">{success}</div> : null}
               </div>
 
               <button type="submit" className="btn-primary" disabled={saving}>

@@ -1026,6 +1026,11 @@ body {
   color: #64748b;
 }
 
+.settings-feedback {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
 .settings-form .btn-primary {
   background: #38bdf8;
   color: #0f172a;

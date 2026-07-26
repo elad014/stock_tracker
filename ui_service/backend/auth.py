@@ -150,8 +150,15 @@ async def update_me(
                 status.HTTP_400_BAD_REQUEST,
                 "Current password is required to set a new password",
             )
-        if not _verify_password(req.old_password, current_user["password"]):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+        try:
+            password_ok: bool = _verify_password(req.old_password, current_user["password"])
+        except (ValueError, TypeError):
+            password_ok = False
+        if not password_ok:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Current password is incorrect",
+            )
         new_hashed_password = _hash_password(req.new_password)
         changes.append({"field": "Password"})
 
