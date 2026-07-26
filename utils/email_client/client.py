@@ -71,5 +71,32 @@ class EmailClient:
         )
         return await self.send(to=to, subject=subject, html=html)
 
+    async def send_account_changes(
+        self,
+        to: str,
+        changes: list[dict[str, str]],
+    ) -> dict:
+        rows: list[str] = []
+        for change in changes:
+            field = change["field"]
+            if field == "Password":
+                rows.append("<li><strong>Password</strong> was changed</li>")
+                continue
+            old_value = change.get("old", "")
+            new_value = change.get("new", "")
+            rows.append(
+                f"<li><strong>{field}</strong> changed from "
+                f"<code>{old_value}</code> to <code>{new_value}</code></li>"
+            )
+
+        subject = "Stock Tracker - Account details updated"
+        html = (
+            "<h2>Account details updated</h2>"
+            "<p>The following changes were made to your Stock Tracker account:</p>"
+            f"<ul>{''.join(rows)}</ul>"
+            "<p>If you did not make these changes, reset your password immediately.</p>"
+        )
+        return await self.send(to=to, subject=subject, html=html)
+
 
 mailer = EmailClient()

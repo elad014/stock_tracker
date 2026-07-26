@@ -171,9 +171,18 @@ export default function DashboardPage(): JSX.Element {
     <div className="dashboard-page">
       <header className="dashboard-header">
         <span className="dashboard-logo">Stock Tracker</span>
-        <button type="button" className="btn-outline" onClick={handleLogout}>
-          Log out
-        </button>
+        <div className="dashboard-header-actions">
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => navigate("/settings")}
+          >
+            Settings
+          </button>
+          <button type="button" className="btn-outline" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-main">

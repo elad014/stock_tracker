@@ -2,13 +2,13 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt
 import bcrypt
 import httpx
@@ -21,7 +21,9 @@ from db_logics.user_db_logic import (
     get_user_by_phone,
     get_user_by_username,
     update_password,
+    update_user_fields,
 )
+from deps import get_current_user
 from email_client import mailer
 from models import (
     LoginRequest,
@@ -31,6 +33,8 @@ from models import (
     RegisterRequest,
     RegisterResponse,
     Token,
+    UpdateSettingsRequest,
+    UpdateSettingsResponse,
 )
 
 load_dotenv()
@@ -74,6 +78,124 @@ async def register(req: RegisterRequest) -> RegisterResponse:
         phone_number=req.phone_number,
     )
     return RegisterResponse(**user)
+
+
+@router.get("/me", response_model=RegisterResponse)
+async def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> RegisterResponse:
+    return RegisterResponse(
+        id=str(current_user["id"]),
+        user_name=current_user["user_name"],
+        email=current_user["email"],
+        phone_number=current_user["phone_number"],
+    )
+
+
+@router.put("/me", response_model=UpdateSettingsResponse)
+async def update_me(
+    req: UpdateSettingsRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> UpdateSettingsResponse:
+    user_id: str = str(current_user["id"])
+    old_email: str = current_user["email"]
+    changes: list[dict[str, str]] = []
+    new_user_name: Optional[str] = None
+    new_email: Optional[str] = None
+    new_phone: Optional[str] = None
+    new_hashed_password: Optional[str] = None
+
+    if req.user_name is not None and req.user_name != current_user["user_name"]:
+        owner = await get_user_by_username(req.user_name)
+        if owner and str(owner["id"]) != user_id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
+        changes.append(
+            {
+                "field": "Username",
+                "old": current_user["user_name"],
+                "new": req.user_name,
+            }
+        )
+        new_user_name = req.user_name
+
+    if req.email is not None and req.email != current_user["email"]:
+        owner = await get_user_by_email(req.email)
+        if owner and str(owner["id"]) != user_id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+        changes.append(
+            {
+                "field": "Email",
+                "old": current_user["email"],
+                "new": req.email,
+            }
+        )
+        new_email = req.email
+
+    if req.phone_number is not None and req.phone_number != current_user["phone_number"]:
+        owner = await get_user_by_phone(req.phone_number)
+        if owner and str(owner["id"]) != user_id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
+        changes.append(
+            {
+                "field": "Phone",
+                "old": current_user["phone_number"],
+                "new": req.phone_number,
+            }
+        )
+        new_phone = req.phone_number
+
+    if req.new_password is not None:
+        if not req.old_password:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Current password is required to set a new password",
+            )
+        if not _verify_password(req.old_password, current_user["password"]):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+        new_hashed_password = _hash_password(req.new_password)
+        changes.append({"field": "Password"})
+
+    if not changes:
+        return UpdateSettingsResponse(
+            id=user_id,
+            user_name=current_user["user_name"],
+            email=current_user["email"],
+            phone_number=current_user["phone_number"],
+            message="No changes to save",
+        )
+
+    await update_user_fields(
+        user_id,
+        user_name=new_user_name,
+        email=new_email,
+        phone_number=new_phone,
+        hashed_password=new_hashed_password,
+    )
+
+    updated_user_name: str = new_user_name or current_user["user_name"]
+    updated_email: str = new_email or current_user["email"]
+    updated_phone: str = new_phone or current_user["phone_number"]
+
+    recipients: set[str] = {old_email, updated_email}
+    try:
+        for recipient in recipients:
+            await mailer.send_account_changes(to=recipient, changes=changes)
+    except (httpx.HTTPStatusError, httpx.RequestError):
+        logger.error("Failed to send account change email for user %s", user_id)
+
+    access_token: Optional[str] = None
+    if new_email is not None:
+        access_token = _create_token(
+            {"sub": updated_email, "user_id": user_id},
+            ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+    return UpdateSettingsResponse(
+        id=user_id,
+        user_name=updated_user_name,
+        email=updated_email,
+        phone_number=updated_phone,
+        message="Settings updated successfully",
+        access_token=access_token,
+    )
 
 
 @router.post("/login", response_model=Token)
