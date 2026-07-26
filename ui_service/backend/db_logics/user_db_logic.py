@@ -18,6 +18,12 @@ def is_admin_role(admin_value: Any) -> bool:
     return str(admin_value).strip().lower() == "admin"
 
 
+def is_user_locked(lock_value: Any) -> bool:
+    if lock_value is None:
+        return False
+    return str(lock_value).strip().lower() == "lock"
+
+
 def _normalize_user(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
@@ -25,34 +31,36 @@ def _normalize_user(row: dict[str, Any]) -> dict[str, Any]:
         "email": row["email"],
         "phone_number": row["phone_number"],
         "admin": row.get("admin"),
+        "lock": row.get("lock"),
         "is_admin": is_admin_role(row.get("admin")),
+        "is_locked": is_user_locked(row.get("lock")),
     }
 
 
 async def get_user_by_email(email: str) -> Optional[dict]:
     return await db.fetch_one(
-        f"SELECT id, user_name, password, email, phone_number, admin FROM {TABLE} WHERE email = $1",
+        f"SELECT id, user_name, password, email, phone_number, admin, lock FROM {TABLE} WHERE email = $1",
         email,
     )
 
 
 async def get_user_by_username(user_name: str) -> Optional[dict]:
     return await db.fetch_one(
-        f"SELECT id, user_name, password, email, phone_number, admin FROM {TABLE} WHERE user_name = $1",
+        f"SELECT id, user_name, password, email, phone_number, admin, lock FROM {TABLE} WHERE user_name = $1",
         user_name,
     )
 
 
 async def get_user_by_phone(phone_number: str) -> Optional[dict]:
     return await db.fetch_one(
-        f"SELECT id, user_name, password, email, phone_number, admin FROM {TABLE} WHERE phone_number = $1",
+        f"SELECT id, user_name, password, email, phone_number, admin, lock FROM {TABLE} WHERE phone_number = $1",
         phone_number,
     )
 
 
 async def get_user_by_id(user_id: str) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
-        f"SELECT id, user_name, email, phone_number, admin FROM {TABLE} WHERE id = $1",
+        f"SELECT id, user_name, email, phone_number, admin, lock FROM {TABLE} WHERE id = $1",
         user_id,
     )
     return _normalize_user(row) if row else None
@@ -60,7 +68,7 @@ async def get_user_by_id(user_id: str) -> Optional[dict[str, Any]]:
 
 async def get_user_auth_by_id(user_id: str) -> Optional[dict[str, Any]]:
     return await db.fetch_one(
-        f"SELECT id, user_name, password, email, phone_number, admin FROM {TABLE} WHERE id = $1",
+        f"SELECT id, user_name, password, email, phone_number, admin, lock FROM {TABLE} WHERE id = $1",
         user_id,
     )
 
@@ -71,12 +79,13 @@ async def create_user(
     email: str,
     phone_number: str,
     admin: Optional[str] = None,
+    lock: Optional[str] = None,
 ) -> dict:
     user_id = str(uuid4())
     await db.execute(
         f"""
-        INSERT INTO {TABLE} (id, user_name, password, email, phone_number, admin)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO {TABLE} (id, user_name, password, email, phone_number, admin, lock)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         """,
         user_id,
         user_name,
@@ -84,6 +93,7 @@ async def create_user(
         email,
         phone_number,
         admin,
+        lock,
     )
     return {
         "id": user_id,
@@ -91,7 +101,9 @@ async def create_user(
         "email": email,
         "phone_number": phone_number,
         "admin": admin,
+        "lock": lock,
         "is_admin": is_admin_role(admin),
+        "is_locked": is_user_locked(lock),
     }
 
 
@@ -135,6 +147,7 @@ async def update_user_fields(
     phone_number: Optional[str] = None,
     hashed_password: Optional[str] = None,
     admin: Any = _UNSET,
+    lock: Any = _UNSET,
 ) -> None:
     sets: list[str] = []
     args: list[Any] = []
@@ -154,6 +167,9 @@ async def update_user_fields(
     if admin is not _UNSET:
         args.append(admin)
         sets.append(f"admin = ${len(args)}")
+    if lock is not _UNSET:
+        args.append(lock)
+        sets.append(f"lock = ${len(args)}")
 
     if not sets:
         return

@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
-from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email, is_admin_role
+from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email, is_admin_role, is_user_locked
 
 load_dotenv()
 
@@ -54,6 +54,12 @@ async def get_current_user(
             status.HTTP_401_UNAUTHORIZED,
             "User not found",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if is_user_locked(user.get("lock")):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Account is locked",
         )
 
     user["id"] = str(user["id"])

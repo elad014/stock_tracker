@@ -21,6 +21,7 @@ from db_logics.user_db_logic import (
     get_user_by_phone,
     get_user_by_username,
     is_admin_role,
+    is_user_locked,
     update_password,
     update_user_fields,
 )
@@ -217,6 +218,12 @@ async def login(req: LoginRequest) -> Token:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if is_user_locked(user.get("lock")):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Account is locked",
+        )
+
     access_token = _create_token(
         {"sub": user["email"], "user_id": str(user["id"])},
         ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -229,6 +236,8 @@ async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
     """Always returns success to avoid leaking whether email exists."""
     user = await get_user_by_email(req.email)
     if user:
+        if is_user_locked(user.get("lock")):
+            return MessageResponse(message="If the email exists, a reset link has been sent")
         token = _create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
         try:
             await mailer.send_password_reset(to=user["email"], reset_token=token)
@@ -252,6 +261,10 @@ async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset token")
 
     if not email or not await get_user_by_email(email):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
+
+    user = await get_user_by_email(email)
+    if not user or is_user_locked(user.get("lock")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
 
     await update_password(email, _hash_password(req.new_password))
