@@ -22,6 +22,19 @@ def _validate_username(user_name: str) -> str:
     return user_name
 
 
+def _normalize_admin_role(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized == "admin":
+            return "admin"
+        raise ValueError("Admin field must be empty or 'admin'")
+    return None
+
+
 class RegisterRequest(BaseModel):
     user_name: str
     email: EmailStr
@@ -146,6 +159,7 @@ class AdminUser(BaseModel):
     user_name: str
     email: str
     phone_number: str
+    admin: Optional[str] = None
     followed_stocks: list[WatchlistStock] = []
 
 
@@ -173,27 +187,24 @@ class AdminCreateUserRequest(BaseModel):
     @field_validator("admin", mode="before")
     @classmethod
     def normalize_admin(cls, v: object) -> object:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            value = v.strip().lower()
-            if not value:
-                return None
-            if value == "admin":
-                return "admin"
-            raise ValueError("Admin field must be empty or 'admin'")
-        return v
+        return _normalize_admin_role(v)
 
 
 class AdminUpdateUserRequest(BaseModel):
     user_name: str
     email: EmailStr
     phone_number: str
+    admin: Optional[str] = None
 
     @field_validator("user_name")
     @classmethod
     def validate_username(cls, v: str) -> str:
         return _validate_username(v)
+
+    @field_validator("admin", mode="before")
+    @classmethod
+    def normalize_admin(cls, v: object) -> object:
+        return _normalize_admin_role(v)
 
 
 class AdminSetPasswordRequest(BaseModel):
