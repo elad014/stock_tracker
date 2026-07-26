@@ -32,6 +32,7 @@ export interface RegisterResponse {
   user_name: string;
   email: string;
   phone_number: string;
+  is_admin: boolean;
 }
 
 export interface CurrentUser {
@@ -39,6 +40,7 @@ export interface CurrentUser {
   user_name: string;
   email: string;
   phone_number: string;
+  is_admin: boolean;
 }
 
 export interface UpdateSettingsPayload {

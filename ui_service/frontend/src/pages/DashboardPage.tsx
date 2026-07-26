@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { fetchCurrentUser } from "../api/auth";
 import {
   addWatchlistStock,
   fetchWatchlist,
@@ -66,6 +67,7 @@ export default function DashboardPage(): JSX.Element {
   const navigate = useNavigate();
   const [stocks, setStocks] = useState<WatchlistStock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [newTicker, setNewTicker] = useState<string>("");
   const [removeStockId, setRemoveStockId] = useState<string>("");
   const [addError, setAddError] = useState<string>("");
@@ -97,8 +99,21 @@ export default function DashboardPage(): JSX.Element {
     }
   }
 
+  async function loadUserRole(): Promise<void> {
+    try {
+      const user = await fetchCurrentUser();
+      setIsAdmin(user.is_admin);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+      }
+    }
+  }
+
   useEffect(() => {
     void loadWatchlist();
+    void loadUserRole();
   }, []);
 
   function handleLogout(): void {
@@ -172,6 +187,15 @@ export default function DashboardPage(): JSX.Element {
       <header className="dashboard-header">
         <span className="dashboard-logo">Stock Tracker</span>
         <div className="dashboard-header-actions">
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => navigate("/admin")}
+            >
+              Admin
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn-outline"

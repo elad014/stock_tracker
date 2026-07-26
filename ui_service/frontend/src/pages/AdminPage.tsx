@@ -215,8 +215,8 @@ export default function AdminPage(): JSX.Element {
     <div className="admin-page">
       <header className="admin-header">
         <span className="admin-logo">Stock Tracker Admin</span>
-        <Link to="/" className="btn-outline">
-          Back to home
+        <Link to="/dashboard" className="btn-outline">
+          Back to dashboard
         </Link>
       </header>
 
