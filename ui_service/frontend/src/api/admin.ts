@@ -24,6 +24,14 @@ export interface RegisterUserPayload {
 
 const api = axios.create({ baseURL: "/admin" });
 
+api.interceptors.request.use((config) => {
+  const token: string | null = localStorage.getItem("access_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
   const res = await api.get<AdminUser[]>("/users");
   return res.data;

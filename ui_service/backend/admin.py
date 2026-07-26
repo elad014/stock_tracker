@@ -1,11 +1,12 @@
 from typing import Any
 
 import bcrypt
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
 from db_logics import watchlist_db_logic as watchlist_db
+from deps import require_admin
 from models import (
     AddWatchlistRequest,
     AdminUser,
@@ -15,7 +16,11 @@ from models import (
     WatchlistStock,
 )
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["Admin"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 def _hash_password(password: str) -> str:

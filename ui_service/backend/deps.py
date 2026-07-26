@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
-from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email
+from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email, is_admin_role
 
 load_dotenv()
 
@@ -58,3 +58,14 @@ async def get_current_user(
 
     user["id"] = str(user["id"])
     return user
+
+
+async def require_admin(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if not is_admin_role(current_user.get("admin")):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Admin access required",
+        )
+    return current_user

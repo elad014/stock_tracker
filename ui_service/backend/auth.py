@@ -20,6 +20,7 @@ from db_logics.user_db_logic import (
     get_user_by_email,
     get_user_by_phone,
     get_user_by_username,
+    is_admin_role,
     update_password,
     update_user_fields,
 )
@@ -87,6 +88,7 @@ async def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> Re
         user_name=current_user["user_name"],
         email=current_user["email"],
         phone_number=current_user["phone_number"],
+        is_admin=is_admin_role(current_user.get("admin")),
     )
 
 
