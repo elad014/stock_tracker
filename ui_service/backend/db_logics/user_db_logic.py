@@ -64,18 +64,33 @@ async def get_user_auth_by_id(user_id: str) -> Optional[dict[str, Any]]:
     )
 
 
-async def create_user(user_name: str, hashed_password: str, email: str, phone_number: str) -> dict:
+async def create_user(
+    user_name: str,
+    hashed_password: str,
+    email: str,
+    phone_number: str,
+    admin: Optional[str] = None,
+) -> dict:
     user_id = str(uuid4())
     await db.execute(
-        f"INSERT INTO {TABLE} (id, user_name, password, email, phone_number) VALUES ($1, $2, $3, $4, $5)",
-        user_id, user_name, hashed_password, email, phone_number,
+        f"""
+        INSERT INTO {TABLE} (id, user_name, password, email, phone_number, admin)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        """,
+        user_id,
+        user_name,
+        hashed_password,
+        email,
+        phone_number,
+        admin,
     )
     return {
         "id": user_id,
         "user_name": user_name,
         "email": email,
         "phone_number": phone_number,
-        "is_admin": False,
+        "admin": admin,
+        "is_admin": is_admin_role(admin),
     }
 
 
