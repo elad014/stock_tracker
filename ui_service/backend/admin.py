@@ -45,6 +45,8 @@ async def create_user(req: RegisterRequest) -> AdminUser:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
     if await user_db.get_user_by_username(req.user_name):
         raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
+    if await user_db.get_user_by_phone(req.phone_number):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
 
     user = await user_db.create_user(
         user_name=req.user_name,
@@ -68,6 +70,10 @@ async def update_user(user_id: str, req: RegisterRequest) -> AdminUser:
     username_owner = await user_db.get_user_by_username(req.user_name)
     if username_owner and str(username_owner["id"]) != user_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
+
+    phone_owner = await user_db.get_user_by_phone(req.phone_number)
+    if phone_owner and str(phone_owner["id"]) != user_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
 
     await user_db.update_user(
         user_id=user_id,

@@ -15,7 +15,13 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-from db_logics.user_db_logic import get_user_by_email, get_user_by_username, create_user, update_password
+from db_logics.user_db_logic import (
+    create_user,
+    get_user_by_email,
+    get_user_by_phone,
+    get_user_by_username,
+    update_password,
+)
 from email_client import mailer
 from models import (
     LoginRequest,
@@ -58,6 +64,8 @@ async def register(req: RegisterRequest) -> RegisterResponse:
 
     if await get_user_by_username(req.user_name):
         raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
+    if await get_user_by_phone(req.phone_number):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
 
     user = await create_user(
         user_name=req.user_name,
