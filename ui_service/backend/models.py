@@ -74,6 +74,63 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class UpdateSettingsRequest(BaseModel):
+    user_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone_number: Optional[str] = None
+    old_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+    @field_validator(
+        "user_name",
+        "email",
+        "phone_number",
+        "old_password",
+        "new_password",
+        mode="before",
+    )
+    @classmethod
+    def blank_as_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("user_name")
+    @classmethod
+    def validate_username(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        if len(v) < 3:
+            raise ValueError("Username must be at least 3 characters")
+        return v
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
+
+class UpdateSettingsResponse(BaseModel):
+    id: str
+    user_name: str
+    email: str
+    phone_number: str
+    message: str
+    access_token: Optional[str] = None
+
+
 class WatchlistStock(BaseModel):
     id: str
     name: str

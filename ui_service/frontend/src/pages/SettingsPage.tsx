@@ -1,7 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchCurrentUser } from "../api/auth";
+import { fetchCurrentUser, updateCurrentUser, UpdateSettingsPayload } from "../api/auth";
+
+function formatApiError(err: any): string {
+  const detail = err.response?.data?.detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail.map((item: { msg?: string }) => item.msg ?? "Invalid input").join(", ");
+  }
+  return "Failed to save settings";
+}
 
 export default function SettingsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -15,7 +26,10 @@ export default function SettingsPage(): JSX.Element {
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
 
   useEffect(() => {
     async function loadUser(): Promise<void> {
@@ -40,8 +54,104 @@ export default function SettingsPage(): JSX.Element {
     void loadUser();
   }, [navigate]);
 
-  function handleSubmit(e: FormEvent): void {
+  function validatePasswordChange(): string | null {
+    const hasOld: boolean = oldPassword.trim().length > 0;
+    const hasNew: boolean = newPassword.trim().length > 0;
+    const hasConfirm: boolean = confirmPassword.trim().length > 0;
+
+    if (!hasOld && !hasNew && !hasConfirm) {
+      return null;
+    }
+    if (!hasOld) {
+      return "Current password is required to set a new password";
+    }
+    if (!hasNew) {
+      return "Enter a new password";
+    }
+    if (newPassword.length < 8) {
+      return "Password must be at least 8 characters";
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return "Password needs an uppercase letter";
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return "Password needs a lowercase letter";
+    }
+    if (!/\d/.test(newPassword)) {
+      return "Password needs a digit";
+    }
+    if (newPassword !== confirmPassword) {
+      return "Passwords do not match";
+    }
+    return null;
+  }
+
+  async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const passwordError: string | null = validatePasswordChange();
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+
+    const trimmedUserName: string = userName.trim();
+    const trimmedEmail: string = email.trim();
+    const trimmedPhone: string = phone.trim();
+
+    if (trimmedUserName && trimmedUserName.length < 3) {
+      setError("Username must be at least 3 characters");
+      return;
+    }
+
+    const payload: UpdateSettingsPayload = {};
+    if (trimmedUserName) {
+      payload.user_name = trimmedUserName;
+    }
+    if (trimmedEmail) {
+      payload.email = trimmedEmail;
+    }
+    if (trimmedPhone) {
+      payload.phone_number = trimmedPhone;
+    }
+    if (newPassword.trim()) {
+      payload.old_password = oldPassword;
+      payload.new_password = newPassword;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setSuccess("No changes to save");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await updateCurrentUser(payload);
+      if (result.access_token) {
+        localStorage.setItem("access_token", result.access_token);
+      }
+      setCurrentUserName(result.user_name);
+      setCurrentEmail(result.email);
+      setCurrentPhone(result.phone_number);
+      setUserName("");
+      setEmail("");
+      setPhone("");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSuccess(result.message);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+        return;
+      }
+      setError(formatApiError(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -67,6 +177,9 @@ export default function SettingsPage(): JSX.Element {
 
           {!loading && !loadError ? (
             <form className="settings-form" onSubmit={handleSubmit}>
+              {error ? <div className="error-msg">{error}</div> : null}
+              {success ? <div className="success-msg">{success}</div> : null}
+
               <div className="settings-field-section">
                 <h2 className="settings-section-title">Username</h2>
                 <p className="settings-current-value">{currentUserName}</p>
@@ -77,7 +190,7 @@ export default function SettingsPage(): JSX.Element {
                     type="text"
                     value={userName}
                     onChange={(e) => setUserName(e.target.value)}
-                    placeholder="Your username"
+                    placeholder="Leave empty to keep current"
                   />
                 </div>
               </div>
@@ -92,7 +205,7 @@ export default function SettingsPage(): JSX.Element {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
+                    placeholder="Leave empty to keep current"
                   />
                 </div>
               </div>
@@ -107,7 +220,7 @@ export default function SettingsPage(): JSX.Element {
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 234 567 8900"
+                    placeholder="Leave empty to keep current"
                   />
                 </div>
               </div>
@@ -152,8 +265,8 @@ export default function SettingsPage(): JSX.Element {
                 </div>
               </div>
 
-              <button type="submit" className="btn-primary" disabled>
-                Save changes
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? "Saving..." : "Save changes"}
               </button>
             </form>
           ) : null}

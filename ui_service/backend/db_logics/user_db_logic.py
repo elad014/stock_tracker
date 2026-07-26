@@ -49,6 +49,13 @@ async def get_user_by_id(user_id: str) -> Optional[dict[str, Any]]:
     return _normalize_user(row) if row else None
 
 
+async def get_user_auth_by_id(user_id: str) -> Optional[dict[str, Any]]:
+    return await db.fetch_one(
+        f"SELECT id, user_name, password, email, phone_number FROM {TABLE} WHERE id = $1",
+        user_id,
+    )
+
+
 async def create_user(user_name: str, hashed_password: str, email: str, phone_number: str) -> dict:
     user_id = str(uuid4())
     await db.execute(
@@ -87,4 +94,38 @@ async def update_password(email: str, hashed_password: str) -> None:
     await db.execute(
         f"UPDATE {TABLE} SET password = $1 WHERE email = $2",
         hashed_password, email,
+    )
+
+
+async def update_user_fields(
+    user_id: str,
+    *,
+    user_name: Optional[str] = None,
+    email: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    hashed_password: Optional[str] = None,
+) -> None:
+    sets: list[str] = []
+    args: list[Any] = []
+
+    if user_name is not None:
+        args.append(user_name)
+        sets.append(f"user_name = ${len(args)}")
+    if email is not None:
+        args.append(email)
+        sets.append(f"email = ${len(args)}")
+    if phone_number is not None:
+        args.append(phone_number)
+        sets.append(f"phone_number = ${len(args)}")
+    if hashed_password is not None:
+        args.append(hashed_password)
+        sets.append(f"password = ${len(args)}")
+
+    if not sets:
+        return
+
+    args.append(user_id)
+    await db.execute(
+        f"UPDATE {TABLE} SET {', '.join(sets)} WHERE id = ${len(args)}",
+        *args,
     )

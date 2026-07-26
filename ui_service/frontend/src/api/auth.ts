@@ -41,6 +41,23 @@ export interface CurrentUser {
   phone_number: string;
 }
 
+export interface UpdateSettingsPayload {
+  user_name?: string;
+  email?: string;
+  phone_number?: string;
+  old_password?: string;
+  new_password?: string;
+}
+
+export interface UpdateSettingsResponse {
+  id: string;
+  user_name: string;
+  email: string;
+  phone_number: string;
+  message: string;
+  access_token?: string | null;
+}
+
 export async function registerUser(data: RegisterPayload): Promise<RegisterResponse> {
   const res = await api.post<RegisterResponse>("/register", data);
   return res.data;
@@ -53,6 +70,13 @@ export async function loginUser(data: LoginPayload): Promise<TokenResponse> {
 
 export async function fetchCurrentUser(): Promise<CurrentUser> {
   const res = await api.get<CurrentUser>("/me");
+  return res.data;
+}
+
+export async function updateCurrentUser(
+  data: UpdateSettingsPayload,
+): Promise<UpdateSettingsResponse> {
+  const res = await api.put<UpdateSettingsResponse>("/me", data);
   return res.data;
 }
 

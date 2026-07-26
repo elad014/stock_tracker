@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
-from db_logics.user_db_logic import get_user_by_email
+from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email
 
 load_dotenv()
 
@@ -35,6 +35,7 @@ async def get_current_user(
                 "Invalid access token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        user_id: str | None = payload.get("user_id")
         email: str | None = payload.get("sub")
     except JWTError as exc:
         raise HTTPException(
@@ -43,14 +44,11 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    if not email:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "Invalid access token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user = await get_user_by_email(email)
+    user = None
+    if user_id:
+        user = await get_user_auth_by_id(str(user_id))
+    if not user and email:
+        user = await get_user_by_email(email)
     if not user:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
