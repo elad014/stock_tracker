@@ -13,6 +13,7 @@ import {
   fetchAdminStocks,
   fetchAdminUsers,
   removeStockFromUser,
+  setAdminUserPassword,
   updateAdminUser,
 } from "../api/admin";
 
@@ -49,14 +50,21 @@ export default function AdminPage(): JSX.Element {
   const [newUserEmail, setNewUserEmail] = useState<string>("");
   const [newUserPhone, setNewUserPhone] = useState<string>("");
   const [newUserPassword, setNewUserPassword] = useState<string>("");
+  const [newUserAdmin, setNewUserAdmin] = useState<string>("");
   const [userFormError, setUserFormError] = useState<string>("");
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editUserName, setEditUserName] = useState<string>("");
   const [editEmail, setEditEmail] = useState<string>("");
   const [editPhone, setEditPhone] = useState<string>("");
-  const [editPassword, setEditPassword] = useState<string>("");
   const [editError, setEditError] = useState<string>("");
+
+  const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
+  const [passwordUserLabel, setPasswordUserLabel] = useState<string>("");
+  const [newPassword, setNewPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [passwordError, setPasswordError] = useState<string>("");
+  const [passwordSuccess, setPasswordSuccess] = useState<string>("");
 
   const [newStockName, setNewStockName] = useState<string>("");
   const [stockFormError, setStockFormError] = useState<string>("");
@@ -88,17 +96,24 @@ export default function AdminPage(): JSX.Element {
   async function handleCreateUser(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setUserFormError("");
+    const adminValue: string = newUserAdmin.trim().toLowerCase();
+    if (adminValue && adminValue !== "admin") {
+      setUserFormError("Admin field must be empty or 'admin'");
+      return;
+    }
     try {
       await createAdminUser({
         user_name: newUserName.trim(),
         email: newUserEmail.trim(),
         phone_number: newUserPhone.trim(),
         password: newUserPassword,
+        admin: adminValue || undefined,
       });
       setNewUserName("");
       setNewUserEmail("");
       setNewUserPhone("");
       setNewUserPassword("");
+      setNewUserAdmin("");
       await loadAll();
     } catch (err: unknown) {
       setUserFormError(errorMessage(err));
@@ -106,11 +121,11 @@ export default function AdminPage(): JSX.Element {
   }
 
   function startEdit(user: AdminUser): void {
+    setPasswordUserId(null);
     setEditingUserId(user.id);
     setEditUserName(user.user_name);
     setEditEmail(user.email);
     setEditPhone(user.phone_number);
-    setEditPassword("");
     setEditError("");
   }
 
@@ -130,12 +145,66 @@ export default function AdminPage(): JSX.Element {
         user_name: editUserName.trim(),
         email: editEmail.trim(),
         phone_number: editPhone.trim(),
-        password: editPassword,
       });
       setEditingUserId(null);
       await loadAll();
     } catch (err: unknown) {
       setEditError(errorMessage(err));
+    }
+  }
+
+  function startSetPassword(user: AdminUser): void {
+    setEditingUserId(null);
+    setPasswordUserId(user.id);
+    setPasswordUserLabel(user.user_name);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+    setPasswordSuccess("");
+  }
+
+  function cancelSetPassword(): void {
+    setPasswordUserId(null);
+    setPasswordError("");
+    setPasswordSuccess("");
+  }
+
+  async function handleSetPassword(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!passwordUserId) {
+      return;
+    }
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setPasswordError("Password needs an uppercase letter");
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      setPasswordError("Password needs a lowercase letter");
+      return;
+    }
+    if (!/\d/.test(newPassword)) {
+      setPasswordError("Password needs a digit");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
+    try {
+      const message = await setAdminUserPassword(passwordUserId, newPassword);
+      setPasswordSuccess(message);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      setPasswordError(errorMessage(err));
     }
   }
 
@@ -148,6 +217,9 @@ export default function AdminPage(): JSX.Element {
       await deleteAdminUser(userId);
       if (editingUserId === userId) {
         setEditingUserId(null);
+      }
+      if (passwordUserId === userId) {
+        setPasswordUserId(null);
       }
       await loadAll();
     } catch (err: unknown) {
@@ -257,6 +329,12 @@ export default function AdminPage(): JSX.Element {
               onChange={(e) => setNewUserPassword(e.target.value)}
               required
             />
+            <input
+              type="text"
+              placeholder="Admin (leave empty or type admin)"
+              value={newUserAdmin}
+              onChange={(e) => setNewUserAdmin(e.target.value)}
+            />
             <button type="submit" className="btn-primary">
               Add user
             </button>
@@ -340,6 +418,13 @@ export default function AdminPage(): JSX.Element {
                         <button
                           type="button"
                           className="btn-outline admin-btn-sm"
+                          onClick={() => startSetPassword(user)}
+                        >
+                          Set password
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-outline admin-btn-sm"
                           onClick={() => void handleDeleteUser(user.id)}
                         >
                           Delete
@@ -376,13 +461,6 @@ export default function AdminPage(): JSX.Element {
                 onChange={(e) => setEditPhone(e.target.value)}
                 required
               />
-              <input
-                type="password"
-                placeholder="Password"
-                value={editPassword}
-                onChange={(e) => setEditPassword(e.target.value)}
-                required
-              />
               <div className="admin-actions">
                 <button type="submit" className="btn-primary">
                   Save
@@ -392,6 +470,39 @@ export default function AdminPage(): JSX.Element {
                 </button>
               </div>
               {editError ? <p className="admin-error">{editError}</p> : null}
+            </form>
+          ) : null}
+
+          {passwordUserId ? (
+            <form className="admin-form admin-edit-form" onSubmit={handleSetPassword}>
+              <h2>Set password for {passwordUserLabel}</h2>
+              <p className="admin-subtitle">
+                Current password is not required. Enter a new password only.
+              </p>
+              <input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+              <div className="admin-actions">
+                <button type="submit" className="btn-primary">
+                  Update password
+                </button>
+                <button type="button" className="btn-outline" onClick={cancelSetPassword}>
+                  Cancel
+                </button>
+              </div>
+              {passwordError ? <p className="admin-error">{passwordError}</p> : null}
+              {passwordSuccess ? <p className="success-msg">{passwordSuccess}</p> : null}
             </form>
           ) : null}
         </section>

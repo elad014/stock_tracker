@@ -4,6 +4,24 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, field_validator
 
 
+def _validate_password(password: str) -> str:
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise ValueError("Password must contain at least one digit")
+    return password
+
+
+def _validate_username(user_name: str) -> str:
+    if len(user_name) < 3:
+        raise ValueError("Username must be at least 3 characters")
+    return user_name
+
+
 class RegisterRequest(BaseModel):
     user_name: str
     email: EmailStr
@@ -13,22 +31,12 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password(v)
 
     @field_validator("user_name")
     @classmethod
     def validate_username(cls, v: str) -> str:
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters")
-        return v
+        return _validate_username(v)
 
 
 class RegisterResponse(BaseModel):
@@ -60,15 +68,7 @@ class PasswordResetConfirm(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password(v)
 
 
 class MessageResponse(BaseModel):
@@ -103,24 +103,14 @@ class UpdateSettingsRequest(BaseModel):
     def validate_username(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters")
-        return v
+        return _validate_username(v)
 
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password(v)
 
 
 class UpdateSettingsResponse(BaseModel):
@@ -163,3 +153,53 @@ class AssignStockRequest(BaseModel):
     stock_id: str
 
 
+class AdminCreateUserRequest(BaseModel):
+    user_name: str
+    email: EmailStr
+    password: str
+    phone_number: str
+    admin: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _validate_password(v)
+
+    @field_validator("user_name")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        return _validate_username(v)
+
+    @field_validator("admin", mode="before")
+    @classmethod
+    def normalize_admin(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            value = v.strip().lower()
+            if not value:
+                return None
+            if value == "admin":
+                return "admin"
+            raise ValueError("Admin field must be empty or 'admin'")
+        return v
+
+
+class AdminUpdateUserRequest(BaseModel):
+    user_name: str
+    email: EmailStr
+    phone_number: str
+
+    @field_validator("user_name")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        return _validate_username(v)
+
+
+class AdminSetPasswordRequest(BaseModel):
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _validate_password(v)

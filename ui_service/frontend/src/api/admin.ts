@@ -20,6 +20,13 @@ export interface RegisterUserPayload {
   email: string;
   password: string;
   phone_number: string;
+  admin?: string;
+}
+
+export interface UpdateUserPayload {
+  user_name: string;
+  email: string;
+  phone_number: string;
 }
 
 const api = axios.create({ baseURL: "/admin" });
@@ -44,10 +51,20 @@ export async function createAdminUser(data: RegisterUserPayload): Promise<AdminU
 
 export async function updateAdminUser(
   userId: string,
-  data: RegisterUserPayload,
+  data: UpdateUserPayload,
 ): Promise<AdminUser> {
   const res = await api.put<AdminUser>(`/users/${userId}`, data);
   return res.data;
+}
+
+export async function setAdminUserPassword(
+  userId: string,
+  newPassword: string,
+): Promise<string> {
+  const res = await api.put<{ message: string }>(`/users/${userId}/password`, {
+    new_password: newPassword,
+  });
+  return res.data.message;
 }
 
 export async function deleteAdminUser(userId: string): Promise<string> {

@@ -9,10 +9,12 @@ from db_logics import watchlist_db_logic as watchlist_db
 from deps import require_admin
 from models import (
     AddWatchlistRequest,
+    AdminCreateUserRequest,
+    AdminSetPasswordRequest,
+    AdminUpdateUserRequest,
     AdminUser,
     AssignStockRequest,
     MessageResponse,
-    RegisterRequest,
     WatchlistStock,
 )
 
@@ -45,7 +47,7 @@ async def list_users() -> list[AdminUser]:
 
 
 @router.post("/users", response_model=AdminUser, status_code=status.HTTP_201_CREATED)
-async def create_user(req: RegisterRequest) -> AdminUser:
+async def create_user(req: AdminCreateUserRequest) -> AdminUser:
     if await user_db.get_user_by_email(req.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
     if await user_db.get_user_by_username(req.user_name):
@@ -58,12 +60,13 @@ async def create_user(req: RegisterRequest) -> AdminUser:
         hashed_password=_hash_password(req.password),
         email=req.email,
         phone_number=req.phone_number,
+        admin=req.admin,
     )
     return await _user_with_stocks(user)
 
 
 @router.put("/users/{user_id}", response_model=AdminUser)
-async def update_user(user_id: str, req: RegisterRequest) -> AdminUser:
+async def update_user(user_id: str, req: AdminUpdateUserRequest) -> AdminUser:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -80,16 +83,29 @@ async def update_user(user_id: str, req: RegisterRequest) -> AdminUser:
     if phone_owner and str(phone_owner["id"]) != user_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Phone number already registered")
 
-    await user_db.update_user(
-        user_id=user_id,
+    await user_db.update_user_fields(
+        user_id,
         user_name=req.user_name,
         email=req.email,
         phone_number=req.phone_number,
-        hashed_password=_hash_password(req.password),
     )
+
     updated = await user_db.get_user_by_id(user_id)
     assert updated is not None
     return await _user_with_stocks(updated)
+
+
+@router.put("/users/{user_id}/password", response_model=MessageResponse)
+async def set_user_password(user_id: str, req: AdminSetPasswordRequest) -> MessageResponse:
+    existing = await user_db.get_user_by_id(user_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    await user_db.update_user_fields(
+        user_id,
+        hashed_password=_hash_password(req.new_password),
+    )
+    return MessageResponse(message="Password updated")
 
 
 @router.delete("/users/{user_id}", response_model=MessageResponse)
