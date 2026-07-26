@@ -2,13 +2,13 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt
 import bcrypt
 import httpx
@@ -22,6 +22,7 @@ from db_logics.user_db_logic import (
     get_user_by_username,
     update_password,
 )
+from deps import get_current_user
 from email_client import mailer
 from models import (
     LoginRequest,
@@ -74,6 +75,16 @@ async def register(req: RegisterRequest) -> RegisterResponse:
         phone_number=req.phone_number,
     )
     return RegisterResponse(**user)
+
+
+@router.get("/me", response_model=RegisterResponse)
+async def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> RegisterResponse:
+    return RegisterResponse(
+        id=str(current_user["id"]),
+        user_name=current_user["user_name"],
+        email=current_user["email"],
+        phone_number=current_user["phone_number"],
+    )
 
 
 @router.post("/login", response_model=Token)
