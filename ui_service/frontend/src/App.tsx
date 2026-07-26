@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import HelpPage from "./pages/HelpPage";
 import HomePage from "./pages/HomePage";
@@ -16,6 +17,7 @@ export default function App(): JSX.Element {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<RecoveryPage />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route
         path="/dashboard"
         element={

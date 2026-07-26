@@ -92,3 +92,16 @@ class AddWatchlistRequest(BaseModel):
             raise ValueError("Stock name must be 1–5 letters (e.g. AAPL)")
         return ticker
 
+
+class AdminUser(BaseModel):
+    id: str
+    user_name: str
+    email: str
+    phone_number: str
+    followed_stocks: list[WatchlistStock] = []
+
+
+class AssignStockRequest(BaseModel):
+    stock_id: str
+
+
