@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { registerUser } from "../api/auth";
+import { registerUser } from "../../services/authService";
 
 export default function RegisterPage(): JSX.Element {
   const navigate = useNavigate();

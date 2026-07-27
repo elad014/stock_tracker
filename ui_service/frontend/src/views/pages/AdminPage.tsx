@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 
 import {
-  AdminStock,
-  AdminUser,
   assignStockToUser,
   createAdminStock,
   createAdminUser,
@@ -17,7 +15,8 @@ import {
   removeUserLock,
   setAdminUserPassword,
   updateAdminUser,
-} from "../api/admin";
+} from "../../services/adminService";
+import type { AdminStock, AdminUser } from "../../models/admin";
 
 function formatCell(value: number | string | null): string {
   if (value === null || value === undefined || value === "") {

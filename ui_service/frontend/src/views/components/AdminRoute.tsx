@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
-import { fetchCurrentUser } from "../api/auth";
+import { fetchCurrentUser } from "../../services/authService";
 
 type AdminRouteProps = {
   children: JSX.Element;

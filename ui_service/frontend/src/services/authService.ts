@@ -1,5 +1,15 @@
 import axios from "axios";
 
+import type {
+  CurrentUser,
+  LoginPayload,
+  RegisterPayload,
+  RegisterResponse,
+  TokenResponse,
+  UpdateSettingsPayload,
+  UpdateSettingsResponse,
+} from "../models/auth";
+
 const api = axios.create({ baseURL: "/auth" });
 
 api.interceptors.request.use((config) => {
@@ -9,56 +19,6 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
-
-export interface RegisterPayload {
-  user_name: string;
-  email: string;
-  password: string;
-  phone_number: string;
-}
-
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
-
-export interface TokenResponse {
-  access_token: string;
-  token_type: string;
-}
-
-export interface RegisterResponse {
-  id: string;
-  user_name: string;
-  email: string;
-  phone_number: string;
-  is_admin: boolean;
-}
-
-export interface CurrentUser {
-  id: string;
-  user_name: string;
-  email: string;
-  phone_number: string;
-  is_admin: boolean;
-}
-
-export interface UpdateSettingsPayload {
-  user_name?: string;
-  email?: string;
-  phone_number?: string;
-  old_password?: string;
-  new_password?: string;
-}
-
-export interface UpdateSettingsResponse {
-  id: string;
-  user_name: string;
-  email: string;
-  phone_number: string;
-  message: string;
-  access_token?: string | null;
-}
 
 export async function registerUser(data: RegisterPayload): Promise<RegisterResponse> {
   const res = await api.post<RegisterResponse>("/register", data);
