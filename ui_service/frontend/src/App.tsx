@@ -1,15 +1,15 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import AdminRoute from "./components/AdminRoute";
-import ProtectedRoute from "./components/ProtectedRoute";
-import AdminPage from "./pages/AdminPage";
-import DashboardPage from "./pages/DashboardPage";
-import HelpPage from "./pages/HelpPage";
-import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import RecoveryPage from "./pages/RecoveryPage";
-import SettingsPage from "./pages/SettingsPage";
+import AdminRoute from "./views/components/AdminRoute";
+import ProtectedRoute from "./views/components/ProtectedRoute";
+import AdminPage from "./views/pages/AdminPage";
+import DashboardPage from "./views/pages/DashboardPage";
+import HelpPage from "./views/pages/HelpPage";
+import HomePage from "./views/pages/HomePage";
+import LoginPage from "./views/pages/LoginPage";
+import RegisterPage from "./views/pages/RegisterPage";
+import RecoveryPage from "./views/pages/RecoveryPage";
+import SettingsPage from "./views/pages/SettingsPage";
 
 export default function App(): JSX.Element {
   return (

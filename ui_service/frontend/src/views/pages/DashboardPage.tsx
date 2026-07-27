@@ -1,13 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchCurrentUser } from "../api/auth";
+import { fetchCurrentUser } from "../../services/authService";
 import {
   addWatchlistStock,
   fetchWatchlist,
   removeWatchlistStock,
-  WatchlistStock,
-} from "../api/watchlist";
+} from "../../services/watchlistService";
+import type { WatchlistStock } from "../../models/watchlist";
 
 type NewsItem = {
   id: string;

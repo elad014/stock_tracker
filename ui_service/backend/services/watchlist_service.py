@@ -1,24 +1,20 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import HTTPException, status
 
 from db_logics import watchlist_db_logic as watchlist_db
-from deps import get_current_user
-from models import AddWatchlistRequest, MessageResponse, WatchlistStock
-
-router = APIRouter(prefix="/watchlist", tags=["Watchlist"])
+from models.auth import MessageResponse
+from models.watchlist import AddWatchlistRequest, WatchlistStock
 
 
-@router.get("", response_model=list[WatchlistStock])
-async def list_watchlist(user: dict[str, Any] = Depends(get_current_user)) -> list[WatchlistStock]:
+async def list_watchlist(user: dict[str, Any]) -> list[WatchlistStock]:
     rows = await watchlist_db.get_watchlist(user["id"])
     return [WatchlistStock(**row) for row in rows]
 
 
-@router.post("", response_model=WatchlistStock, status_code=status.HTTP_201_CREATED)
 async def add_watchlist_stock(
     req: AddWatchlistRequest,
-    user: dict[str, Any] = Depends(get_current_user),
+    user: dict[str, Any],
 ) -> WatchlistStock:
     stock = await watchlist_db.get_stock_by_name(req.name)
     if stock is None:
@@ -31,11 +27,7 @@ async def add_watchlist_stock(
     return WatchlistStock(**stock)
 
 
-@router.delete("/{stock_id}", response_model=MessageResponse)
-async def remove_watchlist_stock(
-    stock_id: str,
-    user: dict[str, Any] = Depends(get_current_user),
-) -> MessageResponse:
+async def remove_watchlist_stock(user: dict[str, Any], stock_id: str) -> MessageResponse:
     result = await watchlist_db.remove_from_watchlist(user["id"], stock_id)
     if result == "DELETE 0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found on your watchlist")

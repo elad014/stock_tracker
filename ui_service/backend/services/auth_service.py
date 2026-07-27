@@ -1,19 +1,13 @@
 import logging
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
-
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, status
-from jose import JWTError, jwt
 import bcrypt
 import httpx
-
-logger = logging.getLogger(__name__)
+from dotenv import load_dotenv
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
 
 from db_logics.user_db_logic import (
     create_user,
@@ -25,9 +19,8 @@ from db_logics.user_db_logic import (
     update_password,
     update_user_fields,
 )
-from deps import get_current_user
 from email_client import mailer
-from models import (
+from models.auth import (
     LoginRequest,
     MessageResponse,
     PasswordResetConfirm,
@@ -41,29 +34,28 @@ from models import (
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 RESET_TOKEN_EXPIRE_MINUTES = 15
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-
-def _hash_password(password: str) -> str:
+def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def _verify_password(plain: str, hashed: str) -> bool:
+def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def _create_token(data: dict, expires_minutes: int) -> str:
+def create_token(data: dict[str, Any], expires_minutes: int) -> str:
     to_encode = data.copy()
     to_encode["exp"] = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(req: RegisterRequest) -> RegisterResponse:
     if await get_user_by_email(req.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
@@ -75,15 +67,14 @@ async def register(req: RegisterRequest) -> RegisterResponse:
 
     user = await create_user(
         user_name=req.user_name,
-        hashed_password=_hash_password(req.password),
+        hashed_password=hash_password(req.password),
         email=req.email,
         phone_number=req.phone_number,
     )
     return RegisterResponse(**user)
 
 
-@router.get("/me", response_model=RegisterResponse)
-async def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> RegisterResponse:
+async def get_me(current_user: dict[str, Any]) -> RegisterResponse:
     return RegisterResponse(
         id=str(current_user["id"]),
         user_name=current_user["user_name"],
@@ -93,10 +84,9 @@ async def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> Re
     )
 
 
-@router.put("/me", response_model=UpdateSettingsResponse)
 async def update_me(
     req: UpdateSettingsRequest,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any],
 ) -> UpdateSettingsResponse:
     user_id: str = str(current_user["id"])
     old_email: str = current_user["email"]
@@ -152,7 +142,7 @@ async def update_me(
                 "Current password is required to set a new password",
             )
         try:
-            password_ok: bool = _verify_password(req.old_password, current_user["password"])
+            password_ok: bool = verify_password(req.old_password, current_user["password"])
         except (ValueError, TypeError):
             password_ok = False
         if not password_ok:
@@ -160,7 +150,7 @@ async def update_me(
                 status.HTTP_400_BAD_REQUEST,
                 "Current password is incorrect",
             )
-        new_hashed_password = _hash_password(req.new_password)
+        new_hashed_password = hash_password(req.new_password)
         changes.append({"field": "Password"})
 
     if not changes:
@@ -193,7 +183,7 @@ async def update_me(
 
     access_token: Optional[str] = None
     if new_email is not None:
-        access_token = _create_token(
+        access_token = create_token(
             {"sub": updated_email, "user_id": user_id},
             ACCESS_TOKEN_EXPIRE_MINUTES,
         )
@@ -208,10 +198,9 @@ async def update_me(
     )
 
 
-@router.post("/login", response_model=Token)
 async def login(req: LoginRequest) -> Token:
     user = await get_user_by_email(req.email)
-    if not user or not _verify_password(req.password, user["password"]):
+    if not user or not verify_password(req.password, user["password"]):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Invalid email or password",
@@ -224,21 +213,19 @@ async def login(req: LoginRequest) -> Token:
             "Account is locked",
         )
 
-    access_token = _create_token(
+    access_token = create_token(
         {"sub": user["email"], "user_id": str(user["id"])},
         ACCESS_TOKEN_EXPIRE_MINUTES,
     )
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.post("/password-reset-request", response_model=MessageResponse)
 async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
-    """Always returns success to avoid leaking whether email exists."""
     user = await get_user_by_email(req.email)
     if user:
         if is_user_locked(user.get("lock")):
             return MessageResponse(message="If the email exists, a reset link has been sent")
-        token = _create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
+        token = create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
         try:
             await mailer.send_password_reset(to=user["email"], reset_token=token)
         except (httpx.HTTPStatusError, httpx.RequestError):
@@ -250,7 +237,6 @@ async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
     return MessageResponse(message="If the email exists, a reset link has been sent")
 
 
-@router.post("/password-reset-confirm", response_model=MessageResponse)
 async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:
     try:
         payload = jwt.decode(req.token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
@@ -267,5 +253,5 @@ async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:
     if not user or is_user_locked(user.get("lock")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
 
-    await update_password(email, _hash_password(req.new_password))
+    await update_password(email, hash_password(req.new_password))
     return MessageResponse(message="Password has been reset successfully")

@@ -1,11 +1,6 @@
 import axios from "axios";
 
-export interface WatchlistStock {
-  id: string;
-  name: string;
-  price: number | null;
-  trend: string | number | null;
-}
+import type { WatchlistStock } from "../models/watchlist";
 
 const api = axios.create({ baseURL: "/watchlist" });
 

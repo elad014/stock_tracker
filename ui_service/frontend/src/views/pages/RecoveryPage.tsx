@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { confirmPasswordReset, requestPasswordReset } from "../api/auth";
+import { confirmPasswordReset, requestPasswordReset } from "../../services/authService";
 
 type Step = "request" | "confirm" | "done";
 

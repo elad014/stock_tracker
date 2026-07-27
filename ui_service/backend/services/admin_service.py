@@ -1,32 +1,20 @@
 from typing import Any
 
-import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import HTTPException, status
 
+from services.auth_service import hash_password
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
 from db_logics import watchlist_db_logic as watchlist_db
-from deps import require_admin
-from models import (
-    AddWatchlistRequest,
+from models.admin import (
     AdminCreateUserRequest,
     AdminSetPasswordRequest,
     AdminUpdateUserRequest,
     AdminUser,
     AssignStockRequest,
-    MessageResponse,
-    WatchlistStock,
 )
-
-router = APIRouter(
-    prefix="/admin",
-    tags=["Admin"],
-    dependencies=[Depends(require_admin)],
-)
-
-
-def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+from models.auth import MessageResponse
+from models.watchlist import AddWatchlistRequest, WatchlistStock
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
@@ -48,13 +36,11 @@ async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
     )
 
 
-@router.get("/users", response_model=list[AdminUser])
 async def list_users() -> list[AdminUser]:
     users = await admin_db.list_users()
     return [await _user_with_stocks(user) for user in users]
 
 
-@router.post("/users", response_model=AdminUser, status_code=status.HTTP_201_CREATED)
 async def create_user(req: AdminCreateUserRequest) -> AdminUser:
     if await user_db.get_user_by_email(req.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
@@ -65,7 +51,7 @@ async def create_user(req: AdminCreateUserRequest) -> AdminUser:
 
     user = await user_db.create_user(
         user_name=req.user_name,
-        hashed_password=_hash_password(req.password),
+        hashed_password=hash_password(req.password),
         email=req.email,
         phone_number=req.phone_number,
         admin=req.admin,
@@ -74,7 +60,6 @@ async def create_user(req: AdminCreateUserRequest) -> AdminUser:
     return await _user_with_stocks(user)
 
 
-@router.put("/users/{user_id}", response_model=AdminUser)
 async def update_user(user_id: str, req: AdminUpdateUserRequest) -> AdminUser:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
@@ -109,7 +94,6 @@ async def update_user(user_id: str, req: AdminUpdateUserRequest) -> AdminUser:
     return await _user_with_stocks(updated)
 
 
-@router.put("/users/{user_id}/password", response_model=MessageResponse)
 async def set_user_password(user_id: str, req: AdminSetPasswordRequest) -> MessageResponse:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
@@ -117,12 +101,11 @@ async def set_user_password(user_id: str, req: AdminSetPasswordRequest) -> Messa
 
     await user_db.update_user_fields(
         user_id,
-        hashed_password=_hash_password(req.new_password),
+        hashed_password=hash_password(req.new_password),
     )
     return MessageResponse(message="Password updated")
 
 
-@router.delete("/users/{user_id}/admin", response_model=MessageResponse)
 async def remove_user_admin(user_id: str) -> MessageResponse:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
@@ -132,7 +115,6 @@ async def remove_user_admin(user_id: str) -> MessageResponse:
     return MessageResponse(message="Admin role removed")
 
 
-@router.delete("/users/{user_id}/lock", response_model=MessageResponse)
 async def remove_user_lock(user_id: str) -> MessageResponse:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
@@ -142,7 +124,6 @@ async def remove_user_lock(user_id: str) -> MessageResponse:
     return MessageResponse(message="Lock removed")
 
 
-@router.delete("/users/{user_id}", response_model=MessageResponse)
 async def delete_user(user_id: str) -> MessageResponse:
     existing = await user_db.get_user_by_id(user_id)
     if not existing:
@@ -155,13 +136,11 @@ async def delete_user(user_id: str) -> MessageResponse:
     return MessageResponse(message="User deleted")
 
 
-@router.get("/stocks", response_model=list[WatchlistStock])
 async def list_stocks() -> list[WatchlistStock]:
     rows = await watchlist_db.list_stocks()
     return [WatchlistStock(**row) for row in rows]
 
 
-@router.post("/stocks", response_model=WatchlistStock, status_code=status.HTTP_201_CREATED)
 async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
     existing = await watchlist_db.get_stock_by_name(req.name)
     if existing:
@@ -170,7 +149,6 @@ async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
     return WatchlistStock(**stock)
 
 
-@router.delete("/stocks/{stock_id}", response_model=MessageResponse)
 async def delete_stock(stock_id: str) -> MessageResponse:
     existing = await watchlist_db.get_stock_by_id(stock_id)
     if not existing:
@@ -183,11 +161,6 @@ async def delete_stock(stock_id: str) -> MessageResponse:
     return MessageResponse(message="Stock deleted")
 
 
-@router.post(
-    "/users/{user_id}/watchlist",
-    response_model=WatchlistStock,
-    status_code=status.HTTP_201_CREATED,
-)
 async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> WatchlistStock:
     user = await user_db.get_user_by_id(user_id)
     if not user:
@@ -204,10 +177,6 @@ async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> Watchli
     return WatchlistStock(**stock)
 
 
-@router.delete(
-    "/users/{user_id}/watchlist/{stock_id}",
-    response_model=MessageResponse,
-)
 async def remove_stock_from_user(user_id: str, stock_id: str) -> MessageResponse:
     user = await user_db.get_user_by_id(user_id)
     if not user:

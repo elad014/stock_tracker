@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchCurrentUser, updateCurrentUser, UpdateSettingsPayload } from "../api/auth";
+import { fetchCurrentUser, updateCurrentUser } from "../../services/authService";
+import type { UpdateSettingsPayload } from "../../models/auth";
 
 function formatApiError(err: any): string {
   const detail = err.response?.data?.detail;

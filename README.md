@@ -50,7 +50,7 @@ stock_tracker/
 │       │   └── pages/          # Login, Register, Recovery pages
 │       ├── package.json
 │       └── vite.config.ts
-└── utils/                      # Shared utility clients
+└── common/                     # Shared utility clients
     ├── database_client/        # Async PostgreSQL client (Neon)
     └── email_client/           # Resend email client
 ```
