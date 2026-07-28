@@ -49,11 +49,18 @@ const MOCK_NEWS: NewsItem[] = [
   },
 ];
 
+function formatNumber(value: number): string {
+  return Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function formatPrice(price: number | null): string {
   if (price === null || price === undefined) {
     return "—";
   }
-  return `$${Number(price).toFixed(2)}`;
+  return `$${formatNumber(price)}`;
 }
 
 function formatChange(change: number | null): string {
@@ -62,7 +69,7 @@ function formatChange(change: number | null): string {
   }
   const value: number = Number(change);
   const sign: string = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}`;
+  return `${sign}${formatNumber(value)}`;
 }
 
 function changeClassName(change: number | null): string {
@@ -138,8 +145,8 @@ export default function DashboardPage(): JSX.Element {
       setAddError("Enter a ticker symbol");
       return;
     }
-    if (!/^[A-Z]{1,5}$/.test(ticker)) {
-      setAddError("Use 1–5 letters only");
+    if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) {
+      setAddError("Invalid ticker (e.g. AAPL, BRK.A)");
       return;
     }
 
@@ -232,8 +239,8 @@ export default function DashboardPage(): JSX.Element {
                   type="text"
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value)}
-                  placeholder="e.g. NVDA"
-                  maxLength={5}
+                  placeholder="e.g. AAPL or BRK-A"
+                  maxLength={7}
                 />
                 <button type="submit" className="btn-solid btn-compact">
                   Add

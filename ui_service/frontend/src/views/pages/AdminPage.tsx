@@ -18,11 +18,18 @@ import {
 } from "../../services/adminService";
 import type { AdminStock, AdminUser } from "../../models/admin";
 
+function formatNumber(value: number): string {
+  return Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function formatPrice(price: number | null): string {
   if (price === null || price === undefined) {
     return "—";
   }
-  return `$${Number(price).toFixed(2)}`;
+  return `$${formatNumber(price)}`;
 }
 
 function formatChange(change: number | null): string {
@@ -31,7 +38,7 @@ function formatChange(change: number | null): string {
   }
   const value: number = Number(change);
   const sign: string = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}`;
+  return `${sign}${formatNumber(value)}`;
 }
 
 function changeClassName(change: number | null): string {
@@ -627,9 +634,10 @@ export default function AdminPage(): JSX.Element {
           <form className="admin-form" onSubmit={handleCreateStock}>
             <input
               type="text"
-              placeholder="Ticker (e.g. AAPL)"
+              placeholder="Ticker (e.g. AAPL, BRK.A)"
               value={newStockName}
               onChange={(e) => setNewStockName(e.target.value.toUpperCase())}
+              maxLength={7}
               required
             />
             <button type="submit" className="btn-primary">

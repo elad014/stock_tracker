@@ -18,6 +18,6 @@ class AddWatchlistRequest(BaseModel):
     @classmethod
     def validate_ticker(cls, v: str) -> str:
         ticker = v.strip().upper()
-        if not re.fullmatch(r"[A-Z]{1,5}", ticker):
-            raise ValueError("Stock name must be 1–5 letters (e.g. AAPL)")
+        if not re.fullmatch(r"[A-Z]{1,5}(?:[.-][A-Z])?", ticker):
+            raise ValueError("Invalid ticker (e.g. AAPL, BRK.A)")
         return ticker
