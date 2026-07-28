@@ -239,7 +239,7 @@ export default function DashboardPage(): JSX.Element {
                   type="text"
                   value={newTicker}
                   onChange={(e) => setNewTicker(e.target.value)}
-                  placeholder="e.g. AAPL or BRK-A"
+                  placeholder="e.g. AAPL or BRK.A"
                   maxLength={7}
                 />
                 <button type="submit" className="btn-solid btn-compact">
