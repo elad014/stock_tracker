@@ -22,7 +22,8 @@ class AdminUser(BaseModel):
 
 
 class AssignStockRequest(BaseModel):
-    stock_id: str
+    stock_id: Optional[str] = None
+    symbol: Optional[str] = None
 
 
 class AdminCreateUserRequest(BaseModel):

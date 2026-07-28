@@ -7,3 +7,5 @@ python-jose[cryptography]
 pydantic[email]
 python-dotenv
 python-multipart
+requests
+apscheduler

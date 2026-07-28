@@ -15,6 +15,7 @@ from models.admin import (
 )
 from models.auth import MessageResponse
 from models.watchlist import AddWatchlistRequest, WatchlistStock
+from services import stock_manager_client as stock_manager
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
@@ -129,7 +130,7 @@ async def delete_user(user_id: str) -> MessageResponse:
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
-    await watchlist_db.delete_watchlist_for_user(user_id)
+    await stock_manager.clear_user_watchlist(user_id)
     result = await user_db.delete_user(user_id)
     if result == "DELETE 0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -145,8 +146,11 @@ async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
     existing = await watchlist_db.get_stock_by_name(req.name)
     if existing:
         raise HTTPException(status.HTTP_409_CONFLICT, "Stock already exists")
-    stock = await watchlist_db.create_stock(req.name)
-    return WatchlistStock(**stock)
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        "Stocks are created when assigned to a user watchlist. "
+        "Use assign with a symbol, or add the ticker from a user watchlist.",
+    )
 
 
 async def delete_stock(stock_id: str) -> MessageResponse:
@@ -154,11 +158,10 @@ async def delete_stock(stock_id: str) -> MessageResponse:
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
 
-    await watchlist_db.delete_watchlist_for_stock(stock_id)
-    result = await watchlist_db.delete_stock(stock_id)
-    if result == "DELETE 0":
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
-    return MessageResponse(message="Stock deleted")
+    await stock_manager.unwatch_stock_everywhere(stock_id)
+    return MessageResponse(
+        message="Stock removed from all watchlists; cleanup will archive history"
+    )
 
 
 async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> WatchlistStock:
@@ -166,15 +169,23 @@ async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> Watchli
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
-    stock = await watchlist_db.get_stock_by_id(req.stock_id)
-    if not stock:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    symbol = req.symbol
+    if not symbol and req.stock_id:
+        stock = await watchlist_db.get_stock_by_id(req.stock_id)
+        if not stock:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+        if await watchlist_db.is_on_watchlist(user_id, req.stock_id):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Stock already on user watchlist")
+        symbol = stock["name"]
 
-    if await watchlist_db.is_on_watchlist(user_id, req.stock_id):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Stock already on user watchlist")
+    if not symbol:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Provide stock_id or symbol",
+        )
 
-    await watchlist_db.add_to_watchlist(user_id, req.stock_id)
-    return WatchlistStock(**stock)
+    payload = await stock_manager.ensure_and_assign(user_id, symbol)
+    return WatchlistStock(**stock_manager.quote_to_watchlist_stock(payload))
 
 
 async def remove_stock_from_user(user_id: str, stock_id: str) -> MessageResponse:
@@ -182,7 +193,5 @@ async def remove_stock_from_user(user_id: str, stock_id: str) -> MessageResponse
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
-    result = await watchlist_db.remove_from_watchlist(user_id, stock_id)
-    if result == "DELETE 0":
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not on user watchlist")
+    await stock_manager.remove_from_watchlist(user_id, stock_id)
     return MessageResponse(message="Stock removed from user watchlist")
