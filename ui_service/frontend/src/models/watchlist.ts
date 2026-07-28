@@ -1,6 +1,6 @@
 export interface WatchlistStock {
   id: string;
-  name: string;
+  symbol: string;
   price: number | null;
-  trend: string | number | null;
+  change: number | null;
 }

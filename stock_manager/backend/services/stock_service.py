@@ -217,6 +217,34 @@ async def _restore_archived_and_watch(
 # =============================================================================
 
 
+async def list_user_watchlist(user_id: str) -> list[StockQuoteResponse]:
+    rows = await watchlist_db.list_user_watchlist(user_id)
+    return [_quote_to_response(row) for row in rows]
+
+
+async def list_all_stocks() -> list[StockQuoteResponse]:
+    rows = await quotes_db.list_all_quotes()
+    return [_quote_to_response(row) for row in rows]
+
+
+async def get_stock(stock_id: str) -> StockQuoteResponse:
+    existing = await quotes_db.get_by_id(stock_id)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return _quote_to_response(existing)
+
+
+async def get_stock_by_symbol(symbol: str) -> StockQuoteResponse:
+    existing = await quotes_db.get_by_symbol(symbol.strip().upper())
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return _quote_to_response(existing)
+
+
+async def is_stock_on_watchlist(user_id: str, stock_id: str) -> bool:
+    return await watchlist_db.is_on_watchlist(user_id, stock_id)
+
+
 async def add_to_watchlist(user_id: str, symbol: str) -> StockQuoteResponse:
     symbol = symbol.strip().upper()
     provider = _provider()

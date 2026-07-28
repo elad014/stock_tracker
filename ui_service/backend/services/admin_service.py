@@ -5,7 +5,6 @@ from fastapi import HTTPException, status
 from services.auth_service import hash_password
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
-from db_logics import watchlist_db_logic as watchlist_db
 from models.admin import (
     AdminCreateUserRequest,
     AdminSetPasswordRequest,
@@ -15,11 +14,11 @@ from models.admin import (
 )
 from models.auth import MessageResponse
 from models.watchlist import AddWatchlistRequest, WatchlistStock
-from services import stock_manager_client as stock_manager
+import stock_manager_client as stock_manager
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
-    stocks = await watchlist_db.get_watchlist(user["id"])
+    stocks = await stock_manager.list_watchlist(user["id"])
     admin_value: str | None = user.get("admin")
     lock_value: str | None = user.get("lock")
     if admin_value is not None:
@@ -33,7 +32,9 @@ async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
         phone_number=user["phone_number"],
         admin=admin_value if user_db.is_admin_role(admin_value) else None,
         lock=lock_value if user_db.is_user_locked(lock_value) else None,
-        followed_stocks=[WatchlistStock(**s) for s in stocks],
+        followed_stocks=[
+            WatchlistStock(**stock_manager.quote_to_watchlist_stock(s)) for s in stocks
+        ],
     )
 
 
@@ -138,12 +139,12 @@ async def delete_user(user_id: str) -> MessageResponse:
 
 
 async def list_stocks() -> list[WatchlistStock]:
-    rows = await watchlist_db.list_stocks()
-    return [WatchlistStock(**row) for row in rows]
+    rows = await stock_manager.list_stocks()
+    return [WatchlistStock(**stock_manager.quote_to_watchlist_stock(row)) for row in rows]
 
 
 async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
-    existing = await watchlist_db.get_stock_by_name(req.name)
+    existing = await stock_manager.get_stock_by_symbol(req.name)
     if existing:
         raise HTTPException(status.HTTP_409_CONFLICT, "Stock already exists")
     raise HTTPException(
@@ -154,10 +155,7 @@ async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
 
 
 async def delete_stock(stock_id: str) -> MessageResponse:
-    existing = await watchlist_db.get_stock_by_id(stock_id)
-    if not existing:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
-
+    await stock_manager.get_stock(stock_id)
     await stock_manager.unwatch_stock_everywhere(stock_id)
     return MessageResponse(
         message="Stock removed from all watchlists; cleanup will archive history"
@@ -171,12 +169,10 @@ async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> Watchli
 
     symbol = req.symbol
     if not symbol and req.stock_id:
-        stock = await watchlist_db.get_stock_by_id(req.stock_id)
-        if not stock:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
-        if await watchlist_db.is_on_watchlist(user_id, req.stock_id):
+        stock = await stock_manager.get_stock(req.stock_id)
+        if await stock_manager.is_on_watchlist(user_id, req.stock_id):
             raise HTTPException(status.HTTP_409_CONFLICT, "Stock already on user watchlist")
-        symbol = stock["name"]
+        symbol = stock["symbol"]
 
     if not symbol:
         raise HTTPException(

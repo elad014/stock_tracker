@@ -90,6 +90,20 @@ async def upsert_quote(
     return _normalize_quote(row)
 
 
+async def list_all_quotes(
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    rows = await db.fetch_all(
+        f"""
+        SELECT stock_id, symbol, name, close, change, percent_change
+        FROM {QUOTES_TABLE}
+        ORDER BY symbol
+        """,
+        conn=conn,
+    )
+    return [_normalize_quote(row) for row in rows]
+
+
 async def list_watched_quotes(
     conn: Optional[asyncpg.Connection] = None,
 ) -> list[dict[str, Any]]:

@@ -21,6 +21,68 @@ router = APIRouter(
 )
 
 
+@router.get(
+    "/watchlist/{user_id}",
+    tags=["Watchlist"],
+    summary="List stocks on a user watchlist",
+    response_model=list[StockQuoteResponse],
+)
+async def list_watchlist(
+    user_id: str = Path(..., description="User UUID whose watchlist to return"),
+) -> list[StockQuoteResponse]:
+    return await stock_service.list_user_watchlist(user_id)
+
+
+@router.get(
+    "/stocks",
+    tags=["Admin"],
+    summary="List all stock quotes",
+    response_model=list[StockQuoteResponse],
+)
+async def list_stocks() -> list[StockQuoteResponse]:
+    return await stock_service.list_all_stocks()
+
+
+@router.get(
+    "/stocks/symbol/{symbol}",
+    tags=["Admin"],
+    summary="Get stock quote by symbol",
+    response_model=StockQuoteResponse,
+    responses={404: {"description": "Stock not found"}},
+)
+async def get_stock_by_symbol(
+    symbol: str = Path(..., description="Ticker symbol, e.g. AAPL"),
+) -> StockQuoteResponse:
+    return await stock_service.get_stock_by_symbol(symbol)
+
+
+@router.get(
+    "/stocks/{stock_id}",
+    tags=["Admin"],
+    summary="Get stock quote by id",
+    response_model=StockQuoteResponse,
+    responses={404: {"description": "Stock not found"}},
+)
+async def get_stock(
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+) -> StockQuoteResponse:
+    return await stock_service.get_stock(stock_id)
+
+
+@router.get(
+    "/watchlist/{user_id}/{stock_id}",
+    tags=["Watchlist"],
+    summary="Check whether a stock is on a user watchlist",
+    response_model=dict[str, bool],
+)
+async def check_watchlist_membership(
+    user_id: str = Path(..., description="User UUID"),
+    stock_id: str = Path(..., description="Stock UUID"),
+) -> dict[str, bool]:
+    on_list = await stock_service.is_stock_on_watchlist(user_id, stock_id)
+    return {"on_watchlist": on_list}
+
+
 @router.post(
     "/watchlist",
     tags=["Watchlist"],

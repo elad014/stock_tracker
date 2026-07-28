@@ -6,9 +6,9 @@ from pydantic import BaseModel, field_validator
 
 class WatchlistStock(BaseModel):
     id: str
-    name: str
+    symbol: str
     price: Optional[float] = None
-    trend: Optional[float | str] = None
+    change: Optional[float] = None
 
 
 class AddWatchlistRequest(BaseModel):

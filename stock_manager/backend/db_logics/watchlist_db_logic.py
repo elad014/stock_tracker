@@ -3,8 +3,28 @@ from typing import Any, Optional
 import asyncpg
 
 from database_client import db
+from db_logics.quotes_db_logic import _normalize_quote
 
 WATCHLIST_TABLE = "watchlist"
+QUOTES_TABLE = "stock_quotes"
+
+
+async def list_user_watchlist(
+    user_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    rows = await db.fetch_all(
+        f"""
+        SELECT q.stock_id, q.symbol, q.name, q.close, q.change, q.percent_change
+        FROM {WATCHLIST_TABLE} w
+        JOIN {QUOTES_TABLE} q ON q.stock_id = w.stock_id
+        WHERE w.user_id = $1::uuid
+        ORDER BY q.symbol
+        """,
+        user_id,
+        conn=conn,
+    )
+    return [_normalize_quote(row) for row in rows]
 
 
 async def is_on_watchlist(
