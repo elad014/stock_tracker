@@ -110,6 +110,14 @@ app = FastAPI(
 app.include_router(stocks_router)
 
 
+@app.api_route(
+    "/",
+    methods=["GET", "HEAD"],
+    tags=["Health"],
+    summary="Root health check (Render default path)",
+    response_model=HealthResponse,
+    include_in_schema=False,
+)
 @app.get(
     "/health",
     tags=["Health"],
