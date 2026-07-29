@@ -51,6 +51,12 @@ async def run_daily_update(*, force: bool = False) -> None:
                     close=quote.close,
                     change=quote.change,
                     percent_change=quote.percent_change,
+                    previous_close=quote.previous_close,
+                    high=quote.high,
+                    low=quote.low,
+                    volume=quote.volume,
+                    fifty_two_week_high=quote.fifty_two_week_high,
+                    fifty_two_week_low=quote.fifty_two_week_low,
                     conn=conn,
                 )
                 if today_bars:

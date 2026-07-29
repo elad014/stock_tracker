@@ -3,7 +3,7 @@ from typing import Any, Optional
 import asyncpg
 
 from database_client import db
-from db_logics.quotes_db_logic import _normalize_quote
+from db_logics.quotes_db_logic import _QUOTE_COLUMNS_Q, _normalize_quote
 
 WATCHLIST_TABLE = "watchlist"
 QUOTES_TABLE = "stock_quotes"
@@ -15,7 +15,7 @@ async def list_user_watchlist(
 ) -> list[dict[str, Any]]:
     rows = await db.fetch_all(
         f"""
-        SELECT q.stock_id, q.symbol, q.name, q.close, q.change, q.percent_change
+        SELECT {_QUOTE_COLUMNS_Q}
         FROM {WATCHLIST_TABLE} w
         JOIN {QUOTES_TABLE} q ON q.stock_id = w.stock_id
         WHERE w.user_id = $1::uuid

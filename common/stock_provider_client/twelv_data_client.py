@@ -18,6 +18,12 @@ class QuoteData:
     close: float | None
     change: float | None
     percent_change: float | None
+    previous_close: float | None = None
+    high: float | None = None
+    low: float | None = None
+    volume: int | None = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
     exchange: str | None = None
 
 
@@ -69,13 +75,35 @@ class TwelveDataClient:
         return data
 
     def get_quote(self, symbol: str) -> QuoteData:
-        data = self.request("quote", {"symbol": symbol.upper()})
+        normalized = symbol.strip().upper()
+        try:
+            data = self.request("quote", {"symbol": normalized})
+        except RuntimeError:
+            # Twelve Data uses class shares with a dot (BRK.A), not a hyphen (BRK-A).
+            if "-" in normalized:
+                data = self.request("quote", {"symbol": normalized.replace("-", ".")})
+            else:
+                raise
+
+        fifty_two = data.get("fifty_two_week")
+        fifty_two_week_high: float | None = None
+        fifty_two_week_low: float | None = None
+        if isinstance(fifty_two, dict):
+            fifty_two_week_high = _to_float(fifty_two.get("high"))
+            fifty_two_week_low = _to_float(fifty_two.get("low"))
+
         return QuoteData(
-            symbol=str(data.get("symbol") or symbol).upper(),
-            name=str(data.get("name") or symbol).strip(),
+            symbol=str(data.get("symbol") or normalized).upper(),
+            name=str(data.get("name") or normalized).strip(),
             close=_to_float(data.get("close")),
             change=_to_float(data.get("change")),
             percent_change=_to_float(data.get("percent_change")),
+            previous_close=_to_float(data.get("previous_close")),
+            high=_to_float(data.get("high")),
+            low=_to_float(data.get("low")),
+            volume=_to_int(data.get("volume")),
+            fifty_two_week_high=fifty_two_week_high,
+            fifty_two_week_low=fifty_two_week_low,
             exchange=str(data["exchange"]) if data.get("exchange") else None,
         )
 
