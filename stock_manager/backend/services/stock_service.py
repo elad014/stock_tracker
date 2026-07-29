@@ -95,6 +95,53 @@ def _history_start_for_range(range_key: str, today: date | None = None) -> date 
     return base - timedelta(days=days)
 
 
+def _with_today_close(
+    bars: list[StockHistoryBar],
+    quote: dict[str, Any],
+    start: date | None,
+) -> list[StockHistoryBar]:
+    """Ensure the latest quote close appears as today's point on the chart."""
+    close = quote.get("close")
+    if close is None:
+        return bars
+
+    today = date.today()
+    if start is not None and today < start:
+        return bars
+
+    today_str = today.isoformat()
+    today_bar = StockHistoryBar(
+        date=today_str,
+        open=quote.get("open"),
+        high=quote.get("high"),
+        low=quote.get("low"),
+        close=float(close),
+        volume=quote.get("volume"),
+    )
+
+    if not bars:
+        return [today_bar]
+
+    last = bars[-1]
+    if last.date == today_str:
+        bars[-1] = StockHistoryBar(
+            date=today_str,
+            open=last.open if last.open is not None else today_bar.open,
+            high=today_bar.high if today_bar.high is not None else last.high,
+            low=today_bar.low if today_bar.low is not None else last.low,
+            close=float(close),
+            volume=(
+                today_bar.volume if today_bar.volume is not None else last.volume
+            ),
+        )
+        return bars
+
+    if last.date < today_str:
+        return [*bars, today_bar]
+
+    return bars
+
+
 async def _upsert_quote_from_provider(
     stock_id: str,
     quote: QuoteData,
@@ -294,7 +341,13 @@ async def get_stock_history(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
     start = _history_start_for_range(range_key)
     rows = await history_db.list_by_stock(stock_id, start=start)
-    return [StockHistoryBar(**row) for row in rows]
+    latest = await history_db.get_latest_bar(stock_id)
+    quote_with_open = {
+        **existing,
+        "open": latest.get("open") if latest else existing.get("open"),
+    }
+    bars = [StockHistoryBar(**row) for row in rows]
+    return _with_today_close(bars, quote_with_open, start)
 
 
 async def is_stock_on_watchlist(user_id: str, stock_id: str) -> bool:
