@@ -167,7 +167,8 @@ async def unwatch_stock_everywhere(
     tags=["Jobs"],
     summary="Trigger daily quote/history update",
     description=(
-        "Manually runs the same job as the daily cron. "
+        "Manually runs the same job as the daily cron: refresh quotes and "
+        "fill any missing history from the last stored day through today. "
         "By default it still skips weekends / closed market; "
         "set force=true to run anyway (useful for testing)."
     ),
