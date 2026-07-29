@@ -64,13 +64,25 @@ class TwelveDataClient:
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            symbol = str(query_params.get("symbol") or "")
+            if status_code == 404:
+                raise RuntimeError(f"Symbol not found: {symbol}") from None
+            raise RuntimeError(f"Twelve Data HTTP {status_code}") from None
+
         data: dict[str, Any] = response.json()
 
         if data.get("status") == "error":
-            raise RuntimeError(
-                f"Twelve Data API error {data.get('code')}: {data.get('message')}"
-            )
+            code = data.get("code")
+            message = str(data.get("message") or "Unknown error")
+            message_lower = message.lower()
+            if code == 404 or "not found" in message_lower or "invalid symbol" in message_lower:
+                symbol = str(query_params.get("symbol") or "")
+                raise RuntimeError(f"Symbol not found: {symbol}") from None
+            raise RuntimeError(f"Twelve Data API error {code}: {message}") from None
 
         return data
 

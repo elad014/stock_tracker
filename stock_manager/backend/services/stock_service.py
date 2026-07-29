@@ -265,15 +265,24 @@ async def add_to_watchlist(user_id: str, symbol: str) -> StockQuoteResponse:
     except RuntimeError as exc:
         message = str(exc).lower()
         if "not found" in message or "invalid" in message or "404" in message:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown symbol: {symbol}") from exc
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Stock {symbol} not found",
+            ) from exc
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            f"Market data provider error: {exc}",
+            "Market data provider error",
         ) from exc
     except Exception as exc:
+        message = str(exc).lower()
+        if "not found" in message or "invalid symbol" in message or "404" in message:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Stock {symbol} not found",
+            ) from exc
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            f"Market data provider error: {exc}",
+            "Market data provider error",
         ) from exc
 
     existing = await quotes_db.get_by_symbol(symbol)

@@ -1,6 +1,9 @@
+import re
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z])?$")
 
 
 class AddWatchlistRequest(BaseModel):
@@ -16,7 +19,7 @@ class AddWatchlistRequest(BaseModel):
     )
 
     user_id: str = Field(..., description="Target user UUID from user_auth_data.id")
-    symbol: str = Field(..., description="Ticker symbol, e.g. AAPL", min_length=1)
+    symbol: str = Field(..., description="Ticker symbol, e.g. AAPL or BRK.A", min_length=1)
 
     @field_validator("symbol")
     @classmethod
@@ -24,6 +27,8 @@ class AddWatchlistRequest(BaseModel):
         symbol = value.strip().upper()
         if not symbol:
             raise ValueError("symbol is required")
+        if not _TICKER_PATTERN.fullmatch(symbol):
+            raise ValueError("Invalid ticker (e.g. AAPL, BRK.A)")
         return symbol
 
 
