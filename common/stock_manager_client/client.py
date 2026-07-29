@@ -55,6 +55,21 @@ async def get_stock(stock_id: str) -> dict[str, Any]:
     return response.json()
 
 
+async def get_stock_history(
+    stock_id: str,
+    range_key: str = "1Y",
+) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/history",
+            headers=_headers(),
+            params={"range": range_key},
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
 async def get_stock_by_symbol(symbol: str) -> Optional[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(

@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from database_client import db
 from routers.admin_routes import router as admin_router
 from routers.auth_routes import router as auth_router
+from routers.stocks_routes import router as stocks_router
 from routers.watchlist_routes import router as watchlist_router
 
 app = FastAPI(title="Stock Tracker API")
@@ -32,6 +33,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(watchlist_router)
+app.include_router(stocks_router)
 app.include_router(admin_router)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"

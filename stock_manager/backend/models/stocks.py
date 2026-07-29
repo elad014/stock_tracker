@@ -56,11 +56,21 @@ class StockQuoteResponse(BaseModel):
     change: Optional[float] = Field(None, description="Absolute price change")
     percent_change: Optional[float] = Field(None, description="Percent price change")
     previous_close: Optional[float] = Field(None, description="Previous session close")
+    open: Optional[float] = Field(None, description="Session / latest bar open")
     high: Optional[float] = Field(None, description="Session high")
     low: Optional[float] = Field(None, description="Session low")
     volume: Optional[int] = Field(None, description="Session volume")
     fifty_two_week_high: Optional[float] = Field(None, description="52-week high")
     fifty_two_week_low: Optional[float] = Field(None, description="52-week low")
+
+
+class StockHistoryBar(BaseModel):
+    date: str = Field(..., description="Trading date (YYYY-MM-DD)")
+    open: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    close: Optional[float] = None
+    volume: Optional[int] = None
 
 
 class MessageResponse(BaseModel):

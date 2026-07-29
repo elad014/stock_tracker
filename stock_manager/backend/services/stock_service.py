@@ -12,8 +12,18 @@ from db_logics import archive_db_logic as archive_db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
 from db_logics import watchlist_db_logic as watchlist_db
-from models.stocks import MessageResponse, StockQuoteResponse
+from models.stocks import MessageResponse, StockHistoryBar, StockQuoteResponse
 from stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
+
+_HISTORY_RANGE_DAYS: dict[str, int | None] = {
+    "1D": 1,
+    "5D": 5,
+    "1M": 30,
+    "3M": 90,
+    "6M": 180,
+    "1Y": 365,
+    "5Y": None,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +59,40 @@ async def _run_provider(func: Any, *args: Any) -> Any:
 # =============================================================================
 
 
-def _quote_to_response(row: dict[str, Any]) -> StockQuoteResponse:
+def _quote_to_response(
+    row: dict[str, Any],
+    *,
+    open_price: float | None = None,
+) -> StockQuoteResponse:
     return StockQuoteResponse(
         stock_id=row["stock_id"],
         symbol=row["symbol"],
-        name=row["name"],
+        name=row["name"] or row["symbol"],
         close=row.get("close"),
         change=row.get("change"),
         percent_change=row.get("percent_change"),
         previous_close=row.get("previous_close"),
+        open=open_price if open_price is not None else row.get("open"),
         high=row.get("high"),
         low=row.get("low"),
         volume=row.get("volume"),
         fifty_two_week_high=row.get("fifty_two_week_high"),
         fifty_two_week_low=row.get("fifty_two_week_low"),
     )
+
+
+def _history_start_for_range(range_key: str, today: date | None = None) -> date | None:
+    base = today or date.today()
+    normalized = range_key.strip().upper()
+    if normalized not in _HISTORY_RANGE_DAYS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Invalid range. Use one of: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y",
+        )
+    days = _HISTORY_RANGE_DAYS[normalized]
+    if days is None:
+        return _retention_cutoff(base)
+    return base - timedelta(days=days)
 
 
 async def _upsert_quote_from_provider(
@@ -242,14 +271,30 @@ async def get_stock(stock_id: str) -> StockQuoteResponse:
     existing = await quotes_db.get_by_id(stock_id)
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
-    return _quote_to_response(existing)
+    latest = await history_db.get_latest_bar(stock_id)
+    open_price = latest.get("open") if latest else None
+    return _quote_to_response(existing, open_price=open_price)
 
 
 async def get_stock_by_symbol(symbol: str) -> StockQuoteResponse:
     existing = await quotes_db.get_by_symbol(symbol.strip().upper())
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
-    return _quote_to_response(existing)
+    latest = await history_db.get_latest_bar(existing["stock_id"])
+    open_price = latest.get("open") if latest else None
+    return _quote_to_response(existing, open_price=open_price)
+
+
+async def get_stock_history(
+    stock_id: str,
+    range_key: str = "1Y",
+) -> list[StockHistoryBar]:
+    existing = await quotes_db.get_by_id(stock_id)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    start = _history_start_for_range(range_key)
+    rows = await history_db.list_by_stock(stock_id, start=start)
+    return [StockHistoryBar(**row) for row in rows]
 
 
 async def is_stock_on_watchlist(user_id: str, stock_id: str) -> bool:

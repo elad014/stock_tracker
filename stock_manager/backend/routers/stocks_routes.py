@@ -9,6 +9,7 @@ from models.stocks import (
     JobTriggerResponse,
     MessageResponse,
     RemoveWatchlistRequest,
+    StockHistoryBar,
     StockQuoteResponse,
 )
 
@@ -67,6 +68,26 @@ async def get_stock(
     stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
 ) -> StockQuoteResponse:
     return await stock_service.get_stock(stock_id)
+
+
+@router.get(
+    "/stocks/{stock_id}/history",
+    tags=["Stocks"],
+    summary="Get daily OHLCV history for a stock",
+    response_model=list[StockHistoryBar],
+    responses={
+        400: {"description": "Invalid range"},
+        404: {"description": "Stock not found"},
+    },
+)
+async def get_stock_history(
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+    range: str = Query(
+        "1Y",
+        description="History window: 1D, 5D, 1M, 3M, 6M, 1Y, or 5Y",
+    ),
+) -> list[StockHistoryBar]:
+    return await stock_service.get_stock_history(stock_id, range)
 
 
 @router.get(

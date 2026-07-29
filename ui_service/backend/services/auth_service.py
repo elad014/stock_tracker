@@ -222,9 +222,13 @@ async def login(req: LoginRequest) -> Token:
 
 async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
     user = await get_user_by_email(req.email)
+    if not user:
+        logger.warning("User not found")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User not found")
     if user:
         if is_user_locked(user.get("lock")):
-            return MessageResponse(message="If the email exists, a reset link has been sent")
+            logger.warning("User is locked")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "User is locked")
         token = create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
         try:
             await mailer.send_password_reset(to=user["email"], reset_token=token)

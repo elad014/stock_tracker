@@ -10,6 +10,7 @@ import LoginPage from "./views/pages/LoginPage";
 import RegisterPage from "./views/pages/RegisterPage";
 import RecoveryPage from "./views/pages/RecoveryPage";
 import SettingsPage from "./views/pages/SettingsPage";
+import StockDetailsPage from "./views/pages/StockDetailsPage";
 
 export default function App(): JSX.Element {
   return (
@@ -32,6 +33,14 @@ export default function App(): JSX.Element {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stocks/:stockId"
+        element={
+          <ProtectedRoute>
+            <StockDetailsPage />
           </ProtectedRoute>
         }
       />
