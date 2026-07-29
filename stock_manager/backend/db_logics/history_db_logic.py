@@ -99,3 +99,63 @@ async def delete_older_than(
         cutoff,
         conn=conn,
     )
+
+
+def _normalize_bar(row: dict[str, Any]) -> dict[str, Any]:
+    bar_date = row["date"]
+    if hasattr(bar_date, "isoformat"):
+        bar_date = bar_date.isoformat()
+    return {
+        "date": str(bar_date),
+        "open": float(row["open"]) if row.get("open") is not None else None,
+        "high": float(row["high"]) if row.get("high") is not None else None,
+        "low": float(row["low"]) if row.get("low") is not None else None,
+        "close": float(row["close"]) if row.get("close") is not None else None,
+        "volume": int(row["volume"]) if row.get("volume") is not None else None,
+    }
+
+
+async def get_latest_bar(
+    stock_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    row = await db.fetch_one(
+        f"""
+        SELECT date, open, high, low, close, volume
+        FROM {HISTORY_TABLE}
+        WHERE stock_id = $1::uuid
+        ORDER BY date DESC
+        LIMIT 1
+        """,
+        stock_id,
+        conn=conn,
+    )
+    return _normalize_bar(row) if row else None
+
+
+async def list_by_stock(
+    stock_id: str,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    clauses: list[str] = ["stock_id = $1::uuid"]
+    args: list[Any] = [stock_id]
+    if start is not None:
+        args.append(start)
+        clauses.append(f"date >= ${len(args)}")
+    if end is not None:
+        args.append(end)
+        clauses.append(f"date <= ${len(args)}")
+    where = " AND ".join(clauses)
+    rows = await db.fetch_all(
+        f"""
+        SELECT date, open, high, low, close, volume
+        FROM {HISTORY_TABLE}
+        WHERE {where}
+        ORDER BY date ASC
+        """,
+        *args,
+        conn=conn,
+    )
+    return [_normalize_bar(row) for row in rows]

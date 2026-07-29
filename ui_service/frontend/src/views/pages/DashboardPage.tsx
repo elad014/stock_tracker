@@ -8,6 +8,11 @@ import {
   removeWatchlistStock,
 } from "../../services/watchlistService";
 import type { WatchlistStock } from "../../models/watchlist";
+import {
+  changeClassName,
+  formatChange,
+  formatPrice,
+} from "../../utils/formatters";
 
 type NewsItem = {
   id: string;
@@ -48,36 +53,6 @@ const MOCK_NEWS: NewsItem[] = [
     relatedSymbol: "AAPL",
   },
 ];
-
-function formatNumber(value: number): string {
-  return Number(value).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatPrice(price: number | null): string {
-  if (price === null || price === undefined) {
-    return "—";
-  }
-  return `$${formatNumber(price)}`;
-}
-
-function formatChange(change: number | null): string {
-  if (change === null || change === undefined) {
-    return "—";
-  }
-  const value: number = Number(change);
-  const sign: string = value > 0 ? "+" : "";
-  return `${sign}${formatNumber(value)}`;
-}
-
-function changeClassName(change: number | null): string {
-  if (change === null || change === undefined || change === 0) {
-    return "";
-  }
-  return change > 0 ? "change-up" : "change-down";
-}
 
 export default function DashboardPage(): JSX.Element {
   const navigate = useNavigate();
@@ -301,7 +276,20 @@ export default function DashboardPage(): JSX.Element {
                   </tr>
                 ) : (
                   stocks.map((stock: WatchlistStock) => (
-                    <tr key={stock.id}>
+                    <tr
+                      key={stock.id}
+                      className="stocks-table-row-clickable"
+                      onClick={() => navigate(`/stocks/${stock.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/stocks/${stock.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Open details for ${stock.symbol}`}
+                    >
                       <td className="symbol-cell">{stock.symbol}</td>
                       <td>{formatPrice(stock.price)}</td>
                       <td className={changeClassName(stock.change)}>

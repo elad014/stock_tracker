@@ -9,6 +9,7 @@ export default defineConfig({
       "/auth": "http://localhost:8000",
       "/watchlist": "http://localhost:8000",
       "/admin": "http://localhost:8000",
+      "/stocks": "http://localhost:8000",
     },
   },
 });
