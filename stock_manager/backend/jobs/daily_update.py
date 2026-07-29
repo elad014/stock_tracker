@@ -4,15 +4,25 @@ from datetime import date, timedelta
 from database_client import db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
-from services.stock_service import _fetch_history, _provider, _retention_cutoff, _run_provider
+from services.stock_service import (
+    _fetch_history_gap_best_effort,
+    _provider,
+    _retention_cutoff,
+    _run_provider,
+)
 
 logger = logging.getLogger(__name__)
 
+# Re-fetch this many calendar days every run so mid-range holes near "today"
+# (e.g. deleted yesterday while today already exists) still get filled.
+_RECENT_LOOKBACK_DAYS = 14
+
 
 async def run_daily_update(*, force: bool = False) -> None:
-    """Refresh quotes and append today's bar for all watched stocks."""
+    """Refresh quotes and fill history gaps through today for all watched stocks."""
     provider = _provider()
     today = date.today()
+    cutoff = _retention_cutoff(today)
 
     if not force and today.weekday() >= 5:
         logger.info("Skipping daily update: weekend")
@@ -37,11 +47,25 @@ async def run_daily_update(*, force: bool = False) -> None:
         symbol = stock["symbol"]
         try:
             quote = await _run_provider(provider.get_quote, symbol)
-            bars = await _fetch_history(symbol, today - timedelta(days=5), today)
-            today_bars = [bar for bar in bars if bar.date == today]
-            if not today_bars and bars:
-                # Holiday / closed day — still refresh quote, skip history insert
-                today_bars = []
+            max_date = await history_db.get_max_date(stock_id)
+            if max_date is None:
+                start = cutoff
+            else:
+                # Fill trailing gaps from last bar, and always re-sync a recent
+                # window so holes before max_date (deleted mid-range days) return.
+                forward_start = max_date + timedelta(days=1)
+                recent_start = today - timedelta(days=_RECENT_LOOKBACK_DAYS)
+                start = max(min(forward_start, recent_start), cutoff)
+
+            bars = await _fetch_history_gap_best_effort(symbol, start, today)
+            logger.info(
+                "Daily update %s: gap %s → %s (%s bars, max_date=%s)",
+                symbol,
+                start,
+                today,
+                len(bars),
+                max_date,
+            )
 
             async with db.transaction() as conn:
                 await quotes_db.upsert_quote(
@@ -59,18 +83,14 @@ async def run_daily_update(*, force: bool = False) -> None:
                     fifty_two_week_low=quote.fifty_two_week_low,
                     conn=conn,
                 )
-                if today_bars:
+                if bars:
                     await history_db.upsert_bars(
                         stock_id,
                         quote.symbol,
-                        today_bars,
+                        bars,
                         conn=conn,
                     )
-                await history_db.delete_older_than(
-                    stock_id,
-                    _retention_cutoff(today),
-                    conn=conn,
-                )
+                await history_db.delete_older_than(stock_id, cutoff, conn=conn)
         except Exception as exc:
             logger.exception("Daily update failed for %s: %s", symbol, exc)
             continue
