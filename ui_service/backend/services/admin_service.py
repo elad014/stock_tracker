@@ -11,9 +11,10 @@ from models.admin import (
     AdminUpdateUserRequest,
     AdminUser,
     AssignStockRequest,
+    CreateAdminStockRequest,
 )
 from models.auth import MessageResponse
-from models.watchlist import AddWatchlistRequest, WatchlistStock
+from models.watchlist import WatchlistStock
 import stock_manager_client as stock_manager
 
 
@@ -143,15 +144,29 @@ async def list_stocks() -> list[WatchlistStock]:
     return [WatchlistStock(**stock_manager.quote_to_watchlist_stock(row)) for row in rows]
 
 
-async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
-    existing = await stock_manager.get_stock_by_symbol(req.name)
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Stock already exists")
-    raise HTTPException(
-        status.HTTP_400_BAD_REQUEST,
-        "Stocks are created when assigned to a user watchlist. "
-        "Use assign with a symbol, or add the ticker from a user watchlist.",
-    )
+async def create_stock(req: CreateAdminStockRequest) -> WatchlistStock:
+    for user_id in req.user_ids:
+        user = await user_db.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"User not found: {user_id}",
+            )
+
+    payload: dict[str, Any] | None = None
+    for user_id in req.user_ids:
+        existing = await stock_manager.get_stock_by_symbol(req.name)
+        if existing and await stock_manager.is_on_watchlist(user_id, existing["stock_id"]):
+            payload = existing
+            continue
+        payload = await stock_manager.ensure_and_assign(user_id, req.name)
+
+    if payload is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Failed to create or assign stock",
+        )
+    return WatchlistStock(**stock_manager.quote_to_watchlist_stock(payload))
 
 
 async def delete_stock(stock_id: str) -> MessageResponse:

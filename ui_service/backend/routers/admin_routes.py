@@ -8,9 +8,10 @@ from models.admin import (
     AdminUpdateUserRequest,
     AdminUser,
     AssignStockRequest,
+    CreateAdminStockRequest,
 )
 from models.auth import MessageResponse
-from models.watchlist import AddWatchlistRequest, WatchlistStock
+from models.watchlist import WatchlistStock
 
 router = APIRouter(
     prefix="/admin",
@@ -60,7 +61,7 @@ async def list_stocks() -> list[WatchlistStock]:
 
 
 @router.post("/stocks", response_model=WatchlistStock, status_code=status.HTTP_201_CREATED)
-async def create_stock(req: AddWatchlistRequest) -> WatchlistStock:
+async def create_stock(req: CreateAdminStockRequest) -> WatchlistStock:
     return await admin_service.create_stock(req)
 
 
