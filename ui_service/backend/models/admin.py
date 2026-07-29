@@ -1,6 +1,7 @@
 from typing import Optional
+import re
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from ui_utils.user_validators import (
     normalize_admin_role,
@@ -9,6 +10,8 @@ from ui_utils.user_validators import (
     validate_username,
 )
 from models.watchlist import WatchlistStock
+
+_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z])?$")
 
 
 class AdminUser(BaseModel):
@@ -24,6 +27,38 @@ class AdminUser(BaseModel):
 class AssignStockRequest(BaseModel):
     stock_id: Optional[str] = None
     symbol: Optional[str] = None
+
+
+class CreateAdminStockRequest(BaseModel):
+    name: str = Field(..., description="Ticker symbol, e.g. AAPL")
+    user_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="One or more user UUIDs to receive the stock on their watchlist",
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not _TICKER_PATTERN.fullmatch(ticker):
+            raise ValueError("Invalid ticker (e.g. AAPL, BRK.A)")
+        return ticker
+
+    @field_validator("user_ids")
+    @classmethod
+    def validate_user_ids(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for user_id in value:
+            normalized = str(user_id).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned.append(normalized)
+        if not cleaned:
+            raise ValueError("Select at least one user")
+        return cleaned
 
 
 class AdminCreateUserRequest(BaseModel):

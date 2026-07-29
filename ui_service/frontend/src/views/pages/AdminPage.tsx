@@ -91,10 +91,31 @@ export default function AdminPage(): JSX.Element {
   const [passwordSuccess, setPasswordSuccess] = useState<string>("");
 
   const [newStockName, setNewStockName] = useState<string>("");
+  const [selectedStockUserIds, setSelectedStockUserIds] = useState<string[]>([]);
   const [stockFormError, setStockFormError] = useState<string>("");
 
   const [assignStockByUser, setAssignStockByUser] = useState<Record<string, string>>({});
   const [assignErrorByUser, setAssignErrorByUser] = useState<Record<string, string>>({});
+
+  function userRoleLabel(user: AdminUser): string {
+    return user.admin === "admin" ? "admin" : "user";
+  }
+
+  function toggleStockUser(userId: string): void {
+    setSelectedStockUserIds((prev: string[]) =>
+      prev.includes(userId)
+        ? prev.filter((id: string) => id !== userId)
+        : [...prev, userId],
+    );
+  }
+
+  function toggleAllStockUsers(): void {
+    if (selectedStockUserIds.length === users.length) {
+      setSelectedStockUserIds([]);
+      return;
+    }
+    setSelectedStockUserIds(users.map((user: AdminUser) => user.id));
+  }
 
   async function loadAll(): Promise<void> {
     setLoading(true);
@@ -306,9 +327,23 @@ export default function AdminPage(): JSX.Element {
   async function handleCreateStock(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setStockFormError("");
+    const ticker: string = newStockName.trim().toUpperCase();
+    if (!ticker) {
+      setStockFormError("Enter a ticker symbol");
+      return;
+    }
+    if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) {
+      setStockFormError("Invalid ticker (e.g. AAPL, BRK.A)");
+      return;
+    }
+    if (selectedStockUserIds.length === 0) {
+      setStockFormError("Select at least one user");
+      return;
+    }
     try {
-      await createAdminStock(newStockName.trim());
+      await createAdminStock(ticker, selectedStockUserIds);
       setNewStockName("");
+      setSelectedStockUserIds([]);
       await loadAll();
     } catch (err: unknown) {
       setStockFormError(errorMessage(err));
@@ -629,20 +664,79 @@ export default function AdminPage(): JSX.Element {
 
         <section className="admin-panel">
           <h1>Stocks</h1>
-          <p className="admin-subtitle">Add or remove stocks in the catalog</p>
+          <p className="admin-subtitle">
+            Add a ticker and choose one or more users to assign it to
+          </p>
 
-          <form className="admin-form" onSubmit={handleCreateStock}>
-            <input
-              type="text"
-              placeholder="Ticker (e.g. AAPL, BRK.A)"
-              value={newStockName}
-              onChange={(e) => setNewStockName(e.target.value.toUpperCase())}
-              maxLength={7}
-              required
-            />
-            <button type="submit" className="btn-primary">
-              Add stock
-            </button>
+          <form className="admin-stock-form" onSubmit={handleCreateStock}>
+            <div className="admin-stock-form-row">
+              <input
+                type="text"
+                placeholder="Ticker (e.g. AAPL, BRK.A)"
+                value={newStockName}
+                onChange={(e) => setNewStockName(e.target.value.toUpperCase())}
+                maxLength={7}
+                required
+              />
+              <button type="submit" className="btn-primary">
+                Add stock
+              </button>
+            </div>
+
+            <div className="admin-user-picker">
+              <div className="admin-user-picker-header">
+                <span>Assign to users</span>
+                <button
+                  type="button"
+                  className="btn-outline admin-btn-sm"
+                  onClick={toggleAllStockUsers}
+                  disabled={users.length === 0}
+                >
+                  {selectedStockUserIds.length === users.length && users.length > 0
+                    ? "Clear all"
+                    : "Select all"}
+                </button>
+              </div>
+              <div className="table-wrap">
+                <table className="stocks-table admin-user-picker-table">
+                  <thead>
+                    <tr>
+                      <th>Select</th>
+                      <th>Username</th>
+                      <th>Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="empty-cell">
+                          No users available
+                        </td>
+                      </tr>
+                    ) : (
+                      users.map((user: AdminUser) => (
+                        <tr key={user.id}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={selectedStockUserIds.includes(user.id)}
+                              onChange={() => toggleStockUser(user.id)}
+                              aria-label={`Select ${user.user_name}`}
+                            />
+                          </td>
+                          <td>{user.user_name}</td>
+                          <td>{userRoleLabel(user)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="admin-user-picker-count">
+                {selectedStockUserIds.length} user
+                {selectedStockUserIds.length === 1 ? "" : "s"} selected
+              </p>
+            </div>
           </form>
           {stockFormError ? <p className="admin-error">{stockFormError}</p> : null}
 

@@ -65,8 +65,14 @@ export async function fetchAdminStocks(): Promise<AdminStock[]> {
   return res.data;
 }
 
-export async function createAdminStock(name: string): Promise<AdminStock> {
-  const res = await api.post<AdminStock>("/stocks", { name });
+export async function createAdminStock(
+  name: string,
+  userIds: string[],
+): Promise<AdminStock> {
+  const res = await api.post<AdminStock>("/stocks", {
+    name,
+    user_ids: userIds,
+  });
   return res.data;
 }
 
