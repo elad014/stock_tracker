@@ -56,11 +56,20 @@ function formatPrice(price: number | null): string {
   return `$${Number(price).toFixed(2)}`;
 }
 
-function formatTrend(trend: string | number | null): string {
-  if (trend === null || trend === undefined || trend === "") {
+function formatChange(change: number | null): string {
+  if (change === null || change === undefined) {
     return "—";
   }
-  return String(trend);
+  const value: number = Number(change);
+  const sign: string = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}`;
+}
+
+function changeClassName(change: number | null): string {
+  if (change === null || change === undefined || change === 0) {
+    return "";
+  }
+  return change > 0 ? "change-up" : "change-down";
 }
 
 export default function DashboardPage(): JSX.Element {
@@ -179,7 +188,8 @@ export default function DashboardPage(): JSX.Element {
 
   const visibleNews: NewsItem[] = MOCK_NEWS.filter(
     (item: NewsItem) =>
-      stocks.length === 0 || stocks.some((s: WatchlistStock) => s.name === item.relatedSymbol),
+      stocks.length === 0 ||
+      stocks.some((s: WatchlistStock) => s.symbol === item.relatedSymbol),
   );
 
   return (
@@ -243,7 +253,7 @@ export default function DashboardPage(): JSX.Element {
                   <option value="">Select a stock</option>
                   {stocks.map((stock: WatchlistStock) => (
                     <option key={stock.id} value={stock.id}>
-                      {stock.name}
+                      {stock.symbol}
                     </option>
                   ))}
                 </select>
@@ -266,7 +276,7 @@ export default function DashboardPage(): JSX.Element {
                 <tr>
                   <th>Symbol</th>
                   <th>Price</th>
-                  <th>Trend</th>
+                  <th>Change</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,9 +295,11 @@ export default function DashboardPage(): JSX.Element {
                 ) : (
                   stocks.map((stock: WatchlistStock) => (
                     <tr key={stock.id}>
-                      <td className="symbol-cell">{stock.name}</td>
+                      <td className="symbol-cell">{stock.symbol}</td>
                       <td>{formatPrice(stock.price)}</td>
-                      <td>{formatTrend(stock.trend)}</td>
+                      <td className={changeClassName(stock.change)}>
+                        {formatChange(stock.change)}
+                      </td>
                     </tr>
                   ))
                 )}

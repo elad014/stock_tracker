@@ -57,6 +57,36 @@ def _quote_to_response(row: dict[str, Any]) -> StockQuoteResponse:
         close=row.get("close"),
         change=row.get("change"),
         percent_change=row.get("percent_change"),
+        previous_close=row.get("previous_close"),
+        high=row.get("high"),
+        low=row.get("low"),
+        volume=row.get("volume"),
+        fifty_two_week_high=row.get("fifty_two_week_high"),
+        fifty_two_week_low=row.get("fifty_two_week_low"),
+    )
+
+
+async def _upsert_quote_from_provider(
+    stock_id: str,
+    quote: QuoteData,
+    *,
+    name: str | None = None,
+    conn: Any = None,
+) -> dict[str, Any]:
+    return await quotes_db.upsert_quote(
+        stock_id=stock_id,
+        symbol=quote.symbol,
+        name=name or quote.name,
+        close=quote.close,
+        change=quote.change,
+        percent_change=quote.percent_change,
+        previous_close=quote.previous_close,
+        high=quote.high,
+        low=quote.low,
+        volume=quote.volume,
+        fifty_two_week_high=quote.fifty_two_week_high,
+        fifty_two_week_low=quote.fifty_two_week_low,
+        conn=conn,
     )
 
 
@@ -92,15 +122,7 @@ async def _refresh_existing_and_watch(
         if not has_hist and await archive_db.has_archive(stock_id):
             # Quote already exists; restore any leftover archive rows into history.
             await archive_db.restore_to_history(stock_id, conn=conn)
-        row = await quotes_db.upsert_quote(
-            stock_id=stock_id,
-            symbol=quote.symbol,
-            name=quote.name,
-            close=quote.close,
-            change=quote.change,
-            percent_change=quote.percent_change,
-            conn=conn,
-        )
+        row = await _upsert_quote_from_provider(stock_id, quote, conn=conn)
         if bars:
             await history_db.upsert_bars(stock_id, quote.symbol, bars, conn=conn)
             await history_db.delete_older_than(stock_id, _retention_cutoff(today), conn=conn)
@@ -121,15 +143,7 @@ async def _create_new_and_watch(user_id: str, quote: QuoteData) -> StockQuoteRes
         ) from exc
 
     async with db.transaction() as conn:
-        row = await quotes_db.upsert_quote(
-            stock_id=stock_id,
-            symbol=quote.symbol,
-            name=quote.name,
-            close=quote.close,
-            change=quote.change,
-            percent_change=quote.percent_change,
-            conn=conn,
-        )
+        row = await _upsert_quote_from_provider(stock_id, quote, conn=conn)
         await history_db.upsert_bars(stock_id, quote.symbol, bars, conn=conn)
         await watchlist_db.add_to_watchlist(user_id, stock_id, conn=conn)
 
@@ -194,13 +208,10 @@ async def _restore_archived_and_watch(
 
     # Quote must exist before history insert (FK). Order: quote -> restore -> gap bars -> watchlist
     async with db.transaction() as conn:
-        row = await quotes_db.upsert_quote(
-            stock_id=stock_id,
-            symbol=quote.symbol,
+        row = await _upsert_quote_from_provider(
+            stock_id,
+            quote,
             name=quote.name or archived["name"],
-            close=quote.close,
-            change=quote.change,
-            percent_change=quote.percent_change,
             conn=conn,
         )
         await archive_db.restore_to_history(stock_id, conn=conn)
@@ -215,6 +226,34 @@ async def _restore_archived_and_watch(
 # =============================================================================
 # Table: watchlist
 # =============================================================================
+
+
+async def list_user_watchlist(user_id: str) -> list[StockQuoteResponse]:
+    rows = await watchlist_db.list_user_watchlist(user_id)
+    return [_quote_to_response(row) for row in rows]
+
+
+async def list_all_stocks() -> list[StockQuoteResponse]:
+    rows = await quotes_db.list_all_quotes()
+    return [_quote_to_response(row) for row in rows]
+
+
+async def get_stock(stock_id: str) -> StockQuoteResponse:
+    existing = await quotes_db.get_by_id(stock_id)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return _quote_to_response(existing)
+
+
+async def get_stock_by_symbol(symbol: str) -> StockQuoteResponse:
+    existing = await quotes_db.get_by_symbol(symbol.strip().upper())
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return _quote_to_response(existing)
+
+
+async def is_stock_on_watchlist(user_id: str, stock_id: str) -> bool:
+    return await watchlist_db.is_on_watchlist(user_id, stock_id)
 
 
 async def add_to_watchlist(user_id: str, symbol: str) -> StockQuoteResponse:

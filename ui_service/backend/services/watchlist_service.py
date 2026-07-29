@@ -2,23 +2,22 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from db_logics import watchlist_db_logic as watchlist_db
 from models.auth import MessageResponse
 from models.watchlist import AddWatchlistRequest, WatchlistStock
-from services import stock_manager_client as stock_manager
+import stock_manager_client as stock_manager
 
 
 async def list_watchlist(user: dict[str, Any]) -> list[WatchlistStock]:
-    rows = await watchlist_db.get_watchlist(user["id"])
-    return [WatchlistStock(**row) for row in rows]
+    rows = await stock_manager.list_watchlist(user["id"])
+    return [WatchlistStock(**stock_manager.quote_to_watchlist_stock(row)) for row in rows]
 
 
 async def add_watchlist_stock(
     req: AddWatchlistRequest,
     user: dict[str, Any],
 ) -> WatchlistStock:
-    existing = await watchlist_db.get_stock_by_name(req.name)
-    if existing and await watchlist_db.is_on_watchlist(user["id"], existing["id"]):
+    existing = await stock_manager.get_stock_by_symbol(req.name)
+    if existing and await stock_manager.is_on_watchlist(user["id"], existing["stock_id"]):
         raise HTTPException(status.HTTP_409_CONFLICT, "Stock already on your watchlist")
 
     payload = await stock_manager.add_to_watchlist(user["id"], req.name)

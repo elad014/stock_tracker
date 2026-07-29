@@ -18,14 +18,27 @@ import {
 } from "../../services/adminService";
 import type { AdminStock, AdminUser } from "../../models/admin";
 
-function formatCell(value: number | string | null): string {
-  if (value === null || value === undefined || value === "") {
+function formatPrice(price: number | null): string {
+  if (price === null || price === undefined) {
     return "—";
   }
-  if (typeof value === "number") {
-    return value.toFixed(2);
+  return `$${Number(price).toFixed(2)}`;
+}
+
+function formatChange(change: number | null): string {
+  if (change === null || change === undefined) {
+    return "—";
   }
-  return String(value);
+  const value: number = Number(change);
+  const sign: string = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}`;
+}
+
+function changeClassName(change: number | null): string {
+  if (change === null || change === undefined || change === 0) {
+    return "";
+  }
+  return change > 0 ? "change-up" : "change-down";
 }
 
 function errorMessage(err: unknown): string {
@@ -433,7 +446,7 @@ export default function AdminPage(): JSX.Element {
                         ) : (
                           user.followed_stocks.map((stock: AdminStock) => (
                             <span key={stock.id} className="admin-stock-tag">
-                              {stock.name}
+                              {stock.symbol}
                               <button
                                 type="button"
                                 className="admin-inline-btn"
@@ -458,7 +471,7 @@ export default function AdminPage(): JSX.Element {
                           <option value="">Add stock…</option>
                           {availableStocksForUser(user).map((stock: AdminStock) => (
                             <option key={stock.id} value={stock.id}>
-                              {stock.name}
+                              {stock.symbol}
                             </option>
                           ))}
                         </select>
@@ -631,16 +644,18 @@ export default function AdminPage(): JSX.Element {
                 <tr>
                   <th>Symbol</th>
                   <th>Price</th>
-                  <th>Trend</th>
+                  <th>Change</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {stocks.map((stock: AdminStock) => (
                   <tr key={stock.id}>
-                    <td className="symbol-cell">{stock.name}</td>
-                    <td>{formatCell(stock.price)}</td>
-                    <td>{formatCell(stock.trend)}</td>
+                    <td className="symbol-cell">{stock.symbol}</td>
+                    <td>{formatPrice(stock.price)}</td>
+                    <td className={changeClassName(stock.change)}>
+                      {formatChange(stock.change)}
+                    </td>
                     <td>
                       <button
                         type="button"

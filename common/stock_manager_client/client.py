@@ -22,6 +22,64 @@ def _raise_from_response(response: httpx.Response) -> None:
     raise HTTPException(response.status_code, detail)
 
 
+async def list_watchlist(user_id: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/watchlist/{user_id}",
+            headers=_headers(),
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
+async def list_stocks() -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/stocks",
+            headers=_headers(),
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
+async def get_stock(stock_id: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/stocks/{stock_id}",
+            headers=_headers(),
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
+async def get_stock_by_symbol(symbol: str) -> Optional[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/stocks/symbol/{symbol}",
+            headers=_headers(),
+        )
+    if response.status_code == status.HTTP_404_NOT_FOUND:
+        return None
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
+async def is_on_watchlist(user_id: str, stock_id: str) -> bool:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/watchlist/{user_id}/{stock_id}",
+            headers=_headers(),
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    payload = response.json()
+    return bool(payload.get("on_watchlist"))
+
+
 async def add_to_watchlist(user_id: str, symbol: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
@@ -84,11 +142,11 @@ async def unwatch_stock_everywhere(stock_id: str) -> dict[str, Any]:
 def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(payload.get("stock_id") or payload.get("id")),
-        "name": payload.get("symbol") or payload.get("name"),
-        "price": payload.get("close") if payload.get("close") is not None else payload.get("price"),
-        "trend": (
-            payload.get("percent_change")
-            if payload.get("percent_change") is not None
-            else payload.get("trend")
+        "symbol": payload.get("symbol") or payload.get("name"),
+        "price": (
+            payload.get("close") if payload.get("close") is not None else payload.get("price")
+        ),
+        "change": (
+            payload.get("change") if payload.get("change") is not None else None
         ),
     }
