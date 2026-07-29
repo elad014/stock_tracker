@@ -1,37 +1,32 @@
-import os
-import sys
 from typing import Any, Optional
-from uuid import uuid4
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "common"))
 
 from database_client import db
 
-STOCKS_TABLE = "stocks"
-WATCHLIST_TABLE = "users_watchlist"
+QUOTES_TABLE = "stock_quotes"
+WATCHLIST_TABLE = "watchlist"
 
 
 def _normalize_stock(row: dict[str, Any]) -> dict[str, Any]:
-    trend_value = row.get("trend")
-    if trend_value is None and "trand" in row:
-        trend_value = row.get("trand")
     return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "price": float(row["price"]) if row.get("price") is not None else None,
-        "trend": trend_value,
+        "id": str(row["stock_id"]),
+        "name": row.get("symbol") or row.get("name"),
+        "price": float(row["close"]) if row.get("close") is not None else None,
+        "trend": (
+            float(row["percent_change"])
+            if row.get("percent_change") is not None
+            else None
+        ),
     }
 
 
 async def get_watchlist(user_id: str) -> list[dict[str, Any]]:
     rows = await db.fetch_all(
         f"""
-        SELECT s.id, s.name, s.price, s.trand AS trend
+        SELECT q.stock_id, q.symbol, q.name, q.close, q.percent_change
         FROM {WATCHLIST_TABLE} w
-        JOIN {STOCKS_TABLE} s ON s.id = w.stock_id
-        WHERE w.user_id = $1
-        ORDER BY s.name
+        JOIN {QUOTES_TABLE} q ON q.stock_id = w.stock_id
+        WHERE w.user_id = $1::uuid
+        ORDER BY q.symbol
         """,
         user_id,
     )
@@ -40,14 +35,22 @@ async def get_watchlist(user_id: str) -> list[dict[str, Any]]:
 
 async def list_stocks() -> list[dict[str, Any]]:
     rows = await db.fetch_all(
-        f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} ORDER BY name"
+        f"""
+        SELECT stock_id, symbol, name, close, percent_change
+        FROM {QUOTES_TABLE}
+        ORDER BY symbol
+        """
     )
     return [_normalize_stock(row) for row in rows]
 
 
 async def get_stock_by_id(stock_id: str) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
-        f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} WHERE id = $1",
+        f"""
+        SELECT stock_id, symbol, name, close, percent_change
+        FROM {QUOTES_TABLE}
+        WHERE stock_id = $1::uuid
+        """,
         stock_id,
     )
     return _normalize_stock(row) if row else None
@@ -55,56 +58,24 @@ async def get_stock_by_id(stock_id: str) -> Optional[dict[str, Any]]:
 
 async def get_stock_by_name(name: str) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
-        f"SELECT id, name, price, trand AS trend FROM {STOCKS_TABLE} WHERE name = $1",
-        name,
+        f"""
+        SELECT stock_id, symbol, name, close, percent_change
+        FROM {QUOTES_TABLE}
+        WHERE symbol = $1
+        """,
+        name.strip().upper(),
     )
     return _normalize_stock(row) if row else None
 
 
-async def create_stock(name: str) -> dict[str, Any]:
-    stock_id = str(uuid4())
-    await db.execute(
-        f"INSERT INTO {STOCKS_TABLE} (id, name, price, trand) VALUES ($1, $2, $3, $4)",
-        stock_id,
-        name,
-        None,
-        None,
-    )
-    return {"id": stock_id, "name": name, "price": None, "trend": None}
-
-
-async def delete_stock(stock_id: str) -> str:
-    return await db.execute(f"DELETE FROM {STOCKS_TABLE} WHERE id = $1", stock_id)
-
-
 async def is_on_watchlist(user_id: str, stock_id: str) -> bool:
     row = await db.fetch_one(
-        f"SELECT user_id FROM {WATCHLIST_TABLE} WHERE user_id = $1 AND stock_id = $2",
+        f"""
+        SELECT 1 AS present
+        FROM {WATCHLIST_TABLE}
+        WHERE user_id = $1::uuid AND stock_id = $2::uuid
+        """,
         user_id,
         stock_id,
     )
     return row is not None
-
-
-async def add_to_watchlist(user_id: str, stock_id: str) -> None:
-    await db.execute(
-        f"INSERT INTO {WATCHLIST_TABLE} (user_id, stock_id) VALUES ($1, $2)",
-        user_id,
-        stock_id,
-    )
-
-
-async def remove_from_watchlist(user_id: str, stock_id: str) -> str:
-    return await db.execute(
-        f"DELETE FROM {WATCHLIST_TABLE} WHERE user_id = $1 AND stock_id = $2",
-        user_id,
-        stock_id,
-    )
-
-
-async def delete_watchlist_for_user(user_id: str) -> None:
-    await db.execute(f"DELETE FROM {WATCHLIST_TABLE} WHERE user_id = $1", user_id)
-
-
-async def delete_watchlist_for_stock(stock_id: str) -> None:
-    await db.execute(f"DELETE FROM {WATCHLIST_TABLE} WHERE stock_id = $1", stock_id)
