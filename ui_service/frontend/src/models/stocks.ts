@@ -12,6 +12,7 @@ export interface StockDetails {
   volume: number | null;
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
+  stock_summery: string | null;
 }
 
 export interface StockHistoryBar {

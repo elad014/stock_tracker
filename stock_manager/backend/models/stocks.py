@@ -62,6 +62,33 @@ class StockQuoteResponse(BaseModel):
     volume: Optional[int] = Field(None, description="Session volume")
     fifty_two_week_high: Optional[float] = Field(None, description="52-week high")
     fifty_two_week_low: Optional[float] = Field(None, description="52-week low")
+    stock_summery: Optional[str] = Field(
+        None,
+        description="AI / news summary for this stock",
+    )
+
+
+class UpdateStockSummeryRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "stock_summery": "AAPL rose after strong iPhone sales guidance."
+                }
+            ]
+        }
+    )
+
+    stock_summery: Optional[str] = Field(
+        None,
+        description="News summary text to store on the quote (null clears it)",
+    )
+
+
+class StockSummeryResponse(BaseModel):
+    stock_id: str
+    symbol: str
+    stock_summery: Optional[str] = None
 
 
 class StockHistoryBar(BaseModel):

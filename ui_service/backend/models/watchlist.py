@@ -9,6 +9,7 @@ class WatchlistStock(BaseModel):
     symbol: str
     price: Optional[float] = None
     change: Optional[float] = None
+    stock_summery: Optional[str] = None
 
 
 class AddWatchlistRequest(BaseModel):

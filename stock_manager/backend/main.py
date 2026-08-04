@@ -102,6 +102,10 @@ app = FastAPI(
             "description": "Manually trigger scheduled daily-update and cleanup/archive jobs.",
         },
         {
+            "name": "News",
+            "description": "Read/update AI news summaries stored on stock_quotes.stock_summery.",
+        },
+        {
             "name": "Health",
             "description": "Service liveness checks (no API key required).",
         },

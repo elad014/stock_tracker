@@ -1,10 +1,14 @@
-from typing import Any
+from typing import Any, Optional
 
 from models.stocks import StockDetails, StockHistoryBar
 import stock_manager_client as stock_manager
 
 
-def _quote_to_stock_details(payload: dict[str, Any]) -> StockDetails:
+def _quote_to_stock_details(
+    payload: dict[str, Any],
+    *,
+    stock_summery: Optional[str] = None,
+) -> StockDetails:
     return StockDetails(
         id=str(payload.get("stock_id") or payload.get("id")),
         symbol=str(payload.get("symbol") or ""),
@@ -19,12 +23,15 @@ def _quote_to_stock_details(payload: dict[str, Any]) -> StockDetails:
         volume=payload.get("volume"),
         fifty_two_week_high=payload.get("fifty_two_week_high"),
         fifty_two_week_low=payload.get("fifty_two_week_low"),
+        stock_summery=stock_summery,
     )
 
 
-async def get_stock_details(stock_id: str) -> StockDetails:
+async def get_stock_details(stock_id: str, user_id: str) -> StockDetails:
     payload = await stock_manager.get_stock(stock_id)
-    return _quote_to_stock_details(payload)
+    on_watchlist = await stock_manager.is_on_watchlist(user_id, stock_id)
+    summary = payload.get("stock_summery") if on_watchlist else None
+    return _quote_to_stock_details(payload, stock_summery=summary)
 
 
 async def get_stock_history(

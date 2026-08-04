@@ -9,11 +9,13 @@ QUOTES_TABLE = "stock_quotes"
 
 _QUOTE_COLUMNS = (
     "stock_id, symbol, name, close, change, percent_change, "
-    "previous_close, high, low, volume, fifty_two_week_high, fifty_two_week_low"
+    "previous_close, high, low, volume, fifty_two_week_high, fifty_two_week_low, "
+    "stock_summery"
 )
 _QUOTE_COLUMNS_Q = (
     "q.stock_id, q.symbol, q.name, q.close, q.change, q.percent_change, "
-    "q.previous_close, q.high, q.low, q.volume, q.fifty_two_week_high, q.fifty_two_week_low"
+    "q.previous_close, q.high, q.low, q.volume, q.fifty_two_week_high, q.fifty_two_week_low, "
+    "q.stock_summery"
 )
 
 
@@ -43,6 +45,7 @@ def _normalize_quote(row: dict[str, Any]) -> dict[str, Any]:
             if row.get("fifty_two_week_low") is not None
             else None
         ),
+        "stock_summery": row.get("stock_summery"),
     }
 
 
@@ -181,6 +184,27 @@ async def list_unwatched_stock_ids(
         conn=conn,
     )
     return [str(row["stock_id"]) for row in rows]
+
+
+async def update_stock_summery(
+    stock_id: str,
+    stock_summery: str | None,
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    row = await db.fetch_one(
+        f"""
+        UPDATE {QUOTES_TABLE}
+        SET stock_summery = $2,
+            updated_at = $3
+        WHERE stock_id = $1::uuid
+        RETURNING {_QUOTE_COLUMNS}
+        """,
+        stock_id,
+        stock_summery,
+        datetime.utcnow(),
+        conn=conn,
+    )
+    return _normalize_quote(row) if row else None
 
 
 async def delete_quote(

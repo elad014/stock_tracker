@@ -5,12 +5,14 @@ from stock_manager_client.client import (
     get_stock,
     get_stock_by_symbol,
     get_stock_history,
+    get_stock_summery,
     is_on_watchlist,
     list_stocks,
     list_watchlist,
     quote_to_watchlist_stock,
     remove_from_watchlist,
     unwatch_stock_everywhere,
+    update_stock_summery,
 )
 
 __all__ = [
@@ -20,10 +22,12 @@ __all__ = [
     "get_stock",
     "get_stock_by_symbol",
     "get_stock_history",
+    "get_stock_summery",
     "is_on_watchlist",
     "list_stocks",
     "list_watchlist",
     "quote_to_watchlist_stock",
     "remove_from_watchlist",
     "unwatch_stock_everywhere",
+    "update_stock_summery",
 ]

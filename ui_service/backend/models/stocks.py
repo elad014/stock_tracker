@@ -17,6 +17,7 @@ class StockDetails(BaseModel):
     volume: Optional[int] = None
     fifty_two_week_high: Optional[float] = None
     fifty_two_week_low: Optional[float] = None
+    stock_summery: Optional[str] = None
 
 
 class StockHistoryBar(BaseModel):
