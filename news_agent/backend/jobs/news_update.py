@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from llm_service_client import summarize
+from llm_service_client import LLMServiceClient
 from stock_manager_client import list_stocks, update_stock_summery
 from stock_provider_client import NewsItem, TwelveDataClient
 
@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 def _provider() -> TwelveDataClient:
     return TwelveDataClient()
+
+
+def _llm_client() -> LLMServiceClient:
+    return LLMServiceClient()
 
 
 async def _run_provider(func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -55,6 +59,7 @@ async def run_news_update() -> None:
     stocks = await list_stocks()
     logger.info("News update for %s stocks", len(stocks))
     provider = _provider()
+    llm_client = _llm_client()
 
     for stock in stocks:
         stock_id = str(stock.get("stock_id") or "")
@@ -74,7 +79,7 @@ async def run_news_update() -> None:
                 continue
 
             news_text = _build_news_text(news_items)
-            summary_result = await summarize(
+            summary_result = await llm_client.summarize(
                 news_text,
                 symbol=symbol,
                 close=_to_float(stock.get("close")),
