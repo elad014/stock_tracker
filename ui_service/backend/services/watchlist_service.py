@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 
 from models.auth import MessageResponse
 from models.watchlist import AddWatchlistRequest, WatchlistStock
-import stock_manager_client as stock_manager
+from stock_manager_client import stock_manager_client as stock_manager
 
 
 async def list_watchlist(user: dict[str, Any]) -> list[WatchlistStock]:

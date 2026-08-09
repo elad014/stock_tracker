@@ -1,7 +1,7 @@
 from typing import Any, Optional
 
 from models.stocks import StockDetails, StockHistoryBar
-import stock_manager_client as stock_manager
+from stock_manager_client import stock_manager_client as stock_manager
 
 
 def _quote_to_stock_details(

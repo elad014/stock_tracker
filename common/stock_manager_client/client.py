@@ -6,194 +6,198 @@ from fastapi import HTTPException, status
 from constant import INTERNAL_API_KEY, INTERNAL_API_KEY_HEADER, STOCK_MANAGER_URL
 
 
-def _headers() -> dict[str, str]:
-    return {INTERNAL_API_KEY_HEADER: INTERNAL_API_KEY}
+class StockManagerClient:
+    """HTTP client for the internal stock-manager service."""
 
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
+        self._base_url = (base_url or STOCK_MANAGER_URL).rstrip("/")
+        self._api_key = api_key if api_key is not None else INTERNAL_API_KEY
 
-def _raise_from_response(response: httpx.Response) -> None:
-    detail: Any
-    try:
+    def _headers(self) -> dict[str, str]:
+        return {INTERNAL_API_KEY_HEADER: self._api_key}
+
+    def _raise_from_response(self, response: httpx.Response) -> None:
+        detail: Any
+        try:
+            payload = response.json()
+            detail = payload.get("detail", payload)
+        except Exception:
+            detail = response.text or "Stock manager request failed"
+        raise HTTPException(response.status_code, detail)
+
+    async def list_watchlist(self, user_id: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/watchlist/{user_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def list_stocks(self) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def get_stock(self, stock_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/{stock_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def get_stock_history(
+        self,
+        stock_id: str,
+        range_key: str = "1Y",
+    ) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/{stock_id}/history",
+                headers=self._headers(),
+                params={"range": range_key},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def get_stock_summery(self, stock_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/{stock_id}/summary",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def update_stock_summery(
+        self,
+        stock_id: str,
+        stock_summery: Optional[str],
+        *,
+        stock_news_published_at: Optional[str] = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "stock_summery": stock_summery,
+            "stock_news_published_at": stock_news_published_at,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(
+                f"{self._base_url}/stocks/{stock_id}/summary",
+                headers=self._headers(),
+                json=body,
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def get_stock_by_symbol(self, symbol: str) -> Optional[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/symbol/{symbol}",
+                headers=self._headers(),
+            )
+        if response.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def is_on_watchlist(self, user_id: str, stock_id: str) -> bool:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/watchlist/{user_id}/{stock_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
         payload = response.json()
-        detail = payload.get("detail", payload)
-    except Exception:
-        detail = response.text or "Stock manager request failed"
-    raise HTTPException(response.status_code, detail)
+        return bool(payload.get("on_watchlist"))
+
+    async def add_to_watchlist(self, user_id: str, symbol: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{self._base_url}/watchlist",
+                headers=self._headers(),
+                json={"user_id": user_id, "symbol": symbol},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def remove_from_watchlist(self, user_id: str, stock_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(
+                "DELETE",
+                f"{self._base_url}/watchlist",
+                headers=self._headers(),
+                json={"user_id": user_id, "stock_id": stock_id},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def ensure_and_assign(self, user_id: str, symbol: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{self._base_url}/admin/ensure-and-assign",
+                headers=self._headers(),
+                json={"user_id": user_id, "symbol": symbol},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def clear_user_watchlist(self, user_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{self._base_url}/watchlist/user/{user_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def unwatch_stock_everywhere(self, stock_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{self._base_url}/stocks/{stock_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    @staticmethod
+    def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": str(payload.get("stock_id") or payload.get("id")),
+            "symbol": payload.get("symbol") or payload.get("name"),
+            "price": (
+                payload.get("close")
+                if payload.get("close") is not None
+                else payload.get("price")
+            ),
+            "change": (
+                payload.get("change") if payload.get("change") is not None else None
+            ),
+            "stock_summery": payload.get("stock_summery"),
+            "stock_news_published_at": payload.get("stock_news_published_at"),
+        }
 
 
-async def list_watchlist(user_id: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/watchlist/{user_id}",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def list_stocks() -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/stocks",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def get_stock(stock_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/stocks/{stock_id}",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def get_stock_history(
-    stock_id: str,
-    range_key: str = "1Y",
-) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/history",
-            headers=_headers(),
-            params={"range": range_key},
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def get_stock_summery(stock_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/summary",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def update_stock_summery(
-    stock_id: str,
-    stock_summery: Optional[str],
-    *,
-    stock_news_published_at: Optional[str] = None,
-) -> dict[str, Any]:
-    body: dict[str, Any] = {
-        "stock_summery": stock_summery,
-        "stock_news_published_at": stock_news_published_at,
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.put(
-            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/summary",
-            headers=_headers(),
-            json=body,
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def get_stock_by_symbol(symbol: str) -> Optional[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/stocks/symbol/{symbol}",
-            headers=_headers(),
-        )
-    if response.status_code == status.HTTP_404_NOT_FOUND:
-        return None
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def is_on_watchlist(user_id: str, stock_id: str) -> bool:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{STOCK_MANAGER_URL}/watchlist/{user_id}/{stock_id}",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    payload = response.json()
-    return bool(payload.get("on_watchlist"))
-
-
-async def add_to_watchlist(user_id: str, symbol: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"{STOCK_MANAGER_URL}/watchlist",
-            headers=_headers(),
-            json={"user_id": user_id, "symbol": symbol},
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def remove_from_watchlist(user_id: str, stock_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.request(
-            "DELETE",
-            f"{STOCK_MANAGER_URL}/watchlist",
-            headers=_headers(),
-            json={"user_id": user_id, "stock_id": stock_id},
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def ensure_and_assign(user_id: str, symbol: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"{STOCK_MANAGER_URL}/admin/ensure-and-assign",
-            headers=_headers(),
-            json={"user_id": user_id, "symbol": symbol},
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def clear_user_watchlist(user_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.delete(
-            f"{STOCK_MANAGER_URL}/watchlist/user/{user_id}",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-async def unwatch_stock_everywhere(stock_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.delete(
-            f"{STOCK_MANAGER_URL}/stocks/{stock_id}",
-            headers=_headers(),
-        )
-    if response.status_code >= 400:
-        _raise_from_response(response)
-    return response.json()
-
-
-def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": str(payload.get("stock_id") or payload.get("id")),
-        "symbol": payload.get("symbol") or payload.get("name"),
-        "price": (
-            payload.get("close") if payload.get("close") is not None else payload.get("price")
-        ),
-        "change": (
-            payload.get("change") if payload.get("change") is not None else None
-        ),
-        "stock_summery": payload.get("stock_summery"),
-        "stock_news_published_at": payload.get("stock_news_published_at"),
-    }
+stock_manager_client = StockManagerClient()
