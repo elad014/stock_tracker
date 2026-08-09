@@ -12,8 +12,10 @@ services:
     environment:
       - PYTHONPATH=/app/common:/app/backend
       - STOCK_MANAGER_URL=http://stock-manager:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
     depends_on:
       - stock-manager
+      - llm-service
     restart: unless-stopped
 
   stock-manager:
@@ -24,6 +26,20 @@ services:
       - "8001:8001"
     env_file:
       - ./stock_manager/backend/.env
+    volumes:
+      - ./common:/app/common
+    environment:
+      - PYTHONPATH=/app/common:/app/backend
+    restart: unless-stopped
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: llm_service/Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./llm_service/backend/.env
     volumes:
       - ./common:/app/common
     environment:
