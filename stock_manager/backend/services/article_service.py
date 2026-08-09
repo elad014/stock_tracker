@@ -99,3 +99,9 @@ async def update_article_summary(
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
     return _to_response(updated)
+
+
+async def purge_old_articles(days: int = 7) -> dict[str, str]:
+    result = await articles_db.delete_older_than(days)
+    logger.info("Purged articles older than %s days (%s)", days, result)
+    return {"message": f"Purged articles older than {days} days", "result": result}

@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
+from constant import ARTICLE_RETENTION_DAYS
 from llm_service_client import LLMServiceClient
 from news_provider_client import NewsItem, NewsProviderClient
 from services.article_service import to_article_payload
@@ -51,7 +52,7 @@ def _newest_published_at(items: list[NewsItem]) -> datetime | None:
 
 
 def _to_float(value: Any) -> float | None:
-    if value is None or value == "":
+    if value is None:
         return None
     try:
         return float(value)
@@ -60,10 +61,23 @@ def _to_float(value: Any) -> float | None:
 
 
 async def run_news_update() -> None:
-    """Fetch news per stock via Finnhub, summarize via llm-service, persist via stock-manager."""
+    """Fetch today's Finnhub articles per stock, store them, update rollup summary.
+
+    Each run:
+    1. Ask Finnhub for every article published today
+    2. Upsert + link those articles (older days stay until retention purge)
+    3. Rebuild stock_summery from today's articles only
+    4. Delete articles older than ARTICLE_RETENTION_DAYS (summaries go with them)
+    """
     stock_manager = _stock_manager_client()
     stocks = await stock_manager.list_stocks()
-    logger.info("News update for %s stocks", len(stocks))
+    today = date.today()
+    logger.info(
+        "News update for %s stocks (today=%s, retention=%s days)",
+        len(stocks),
+        today.isoformat(),
+        ARTICLE_RETENTION_DAYS,
+    )
     news_provider = _news_provider()
     llm_client = _llm_client()
 
@@ -76,12 +90,12 @@ async def run_news_update() -> None:
 
         try:
             news_items: list[NewsItem] = await _run_provider(
-                news_provider.get_news,
+                news_provider.get_news_for_day,
                 symbol,
-                5,
+                today,
             )
             if not news_items:
-                logger.info("No news for %s; skipping summary update", symbol)
+                logger.info("No news for %s on %s; skipping summary update", symbol, today)
                 continue
 
             payload = to_article_payload(news_items)
@@ -109,7 +123,7 @@ async def run_news_update() -> None:
                 stock_news_published_at=published_iso,
             )
             logger.info(
-                "Updated summary for %s (articles=%s, published_at=%s)",
+                "Updated summary for %s (today_articles=%s, published_at=%s)",
                 symbol,
                 len(news_items),
                 published_iso,
@@ -117,3 +131,8 @@ async def run_news_update() -> None:
         except Exception:
             logger.exception("News update failed for %s", symbol)
             continue
+
+    try:
+        await stock_manager.cleanup_old_articles(ARTICLE_RETENTION_DAYS)
+    except Exception:
+        logger.exception("Failed to purge articles older than %s days", ARTICLE_RETENTION_DAYS)

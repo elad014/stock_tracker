@@ -34,7 +34,7 @@ export async function fetchStockHistory(
 
 export async function fetchStockArticles(
   stockId: string,
-  limit: number = 10,
+  limit: number = 100,
 ): Promise<StockArticle[]> {
   const res = await api.get<StockArticle[]>(`/${stockId}/articles`, {
     params: { limit },

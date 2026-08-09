@@ -145,7 +145,7 @@ async def update_stock_summery(
 )
 async def list_stock_articles(
     stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
-    limit: int = Query(10, ge=1, le=50, description="Max number of articles"),
+    limit: int = Query(100, ge=1, le=200, description="Max number of articles"),
 ) -> list[ArticleResponse]:
     return await article_service.list_stock_articles(stock_id, limit)
 
@@ -217,6 +217,23 @@ async def update_article_summary(
         ai_summary_model=req.ai_summary_model,
         ai_summary_error=req.ai_summary_error,
     )
+
+
+@router.post(
+    "/articles/cleanup",
+    tags=["Articles"],
+    summary="Delete articles older than the retention window",
+    description=(
+        "Removes news_articles (and their AI summaries) whose published date "
+        "is outside the last N calendar days. stock_articles links cascade."
+    ),
+    response_model=MessageResponse,
+)
+async def cleanup_old_articles(
+    days: int = Query(7, ge=1, le=90, description="Retention window in calendar days"),
+) -> MessageResponse:
+    result = await article_service.purge_old_articles(days)
+    return MessageResponse(message=result["message"])
 
 
 @router.get(

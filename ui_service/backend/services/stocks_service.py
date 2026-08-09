@@ -1,11 +1,8 @@
-import logging
 from typing import Any, Optional
 
 from models.stocks import StockArticle, StockDetails, StockHistoryBar
 from news_agent_client import news_agent_client as news_agent
 from stock_manager_client import stock_manager_client as stock_manager
-
-logger = logging.getLogger(__name__)
 
 
 def _quote_to_stock_details(
@@ -60,16 +57,9 @@ def _to_article(payload: dict[str, Any]) -> StockArticle:
     )
 
 
-async def list_stock_articles(stock_id: str, limit: int = 10) -> list[StockArticle]:
+async def list_stock_articles(stock_id: str, limit: int = 100) -> list[StockArticle]:
+    """Read-only: articles are filled by news-agent cron / Swagger, never by the user."""
     rows = await stock_manager.list_stock_articles(stock_id, limit)
-    if not rows:
-        # Stock added between scheduled runs: backfill once, then re-read.
-        try:
-            await news_agent.sync_stock_articles(stock_id, limit)
-            rows = await stock_manager.list_stock_articles(stock_id, limit)
-        except Exception:
-            logger.exception("Article backfill failed for stock_id=%s", stock_id)
-            return []
     return [_to_article(row) for row in rows]
 
 

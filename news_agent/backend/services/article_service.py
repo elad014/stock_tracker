@@ -80,7 +80,8 @@ async def sync_stock_articles(
     stock_id: str,
     outputsize: int = 10,
 ) -> ArticleSyncResponse:
-    """Fetch fresh provider news for one stock and persist it via stock-manager."""
+    """Fetch today's Finnhub articles for one stock and store them (Swagger / ops only)."""
+    _ = outputsize
     stock_manager = _stock_manager_client()
     stock = await stock_manager.get_stock(stock_id)
     symbol = str(stock.get("symbol") or "").strip().upper()
@@ -89,7 +90,7 @@ async def sync_stock_articles(
 
     provider = _news_provider()
     try:
-        items = await _run_blocking(provider.get_news, symbol, outputsize)
+        items = await _run_blocking(provider.get_news_for_day, symbol)
     except ValueError as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     except RuntimeError as exc:

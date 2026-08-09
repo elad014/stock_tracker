@@ -227,8 +227,29 @@ async def set_summary(
     return _normalize_article(row) if row else None
 
 
+async def delete_older_than(
+    days: int = 7,
+    conn: Optional[asyncpg.Connection] = None,
+) -> str:
+    """Delete articles outside the retention window (AI summaries go with the row).
+
+    Keeps the last ``days`` calendar days inclusive. Example with days=7 on Aug 9:
+    keeps Aug 3..Aug 9 and deletes anything older.
+    """
+    window = max(1, int(days))
+    return await db.execute(
+        f"""
+        DELETE FROM {ARTICLES_TABLE}
+        WHERE COALESCE(published_at, created_at)::date
+              < (CURRENT_DATE - ($1::int - 1))
+        """,
+        window,
+        conn=conn,
+    )
+
+
 async def delete_orphans_older_than(
-    days: int = 30,
+    days: int = 7,
     conn: Optional[asyncpg.Connection] = None,
 ) -> str:
     """Remove articles no stock links to anymore."""

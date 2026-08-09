@@ -19,15 +19,21 @@ router = APIRouter(
     tags=["Articles"],
     summary="Fetch provider news for one stock and store it",
     description=(
-        "Fetches company news from the news provider and upserts it through "
-        "stock-manager. Used for stocks added between scheduled runs."
+        "Fetches **today's** Finnhub articles for one stock and upserts them "
+        "through stock-manager. For Swagger / ops only — the UI never calls this. "
+        "Daily population is done by the cron job (`POST /jobs/news-update`)."
     ),
     response_model=ArticleSyncResponse,
     responses={404: {"description": "Stock not found"}},
 )
 async def sync_stock_articles(
     stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
-    outputsize: int = Query(10, ge=1, le=50, description="Max articles to store"),
+    outputsize: int = Query(
+        100,
+        ge=1,
+        le=200,
+        description="Ignored; kept for compatibility. Sync stores all of today's articles.",
+    ),
 ) -> ArticleSyncResponse:
     return await article_service.sync_stock_articles(stock_id, outputsize)
 

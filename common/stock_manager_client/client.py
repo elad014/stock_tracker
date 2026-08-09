@@ -108,7 +108,7 @@ class StockManagerClient:
     async def list_stock_articles(
         self,
         stock_id: str,
-        limit: int = 10,
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
@@ -125,7 +125,7 @@ class StockManagerClient:
         stock_id: str,
         articles: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.put(
                 f"{self._base_url}/stocks/{stock_id}/articles",
                 headers=self._headers(),
@@ -175,6 +175,17 @@ class StockManagerClient:
                 f"{self._base_url}/articles/{article_id}/summary",
                 headers=self._headers(),
                 json=body,
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def cleanup_old_articles(self, days: int = 7) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self._base_url}/articles/cleanup",
+                headers=self._headers(),
+                params={"days": days},
             )
         if response.status_code >= 400:
             self._raise_from_response(response)

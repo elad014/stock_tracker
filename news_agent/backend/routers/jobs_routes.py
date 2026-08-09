@@ -20,10 +20,11 @@ router = APIRouter(
     description=(
         "Runs the full news agent for **all** stocks, one stock at a time:\n\n"
         "1. List stocks from stock-manager\n"
-        "2. Fetch Finnhub company news for that stock\n"
-        "3. Send news text to llm-service `/summarize`\n"
-        "4. Update `stock_summery` + `stock_news_published_at` via stock-manager\n\n"
-        "Stocks with no news are skipped. Failures on one stock do not stop the rest."
+        "2. Fetch **all** Finnhub articles published **today** for that stock\n"
+        "3. Upsert those articles (keep last 7 days in DB)\n"
+        "4. Rebuild `stock_summery` from today's articles only via llm-service\n"
+        "5. Delete articles older than 7 days (AI summaries deleted with them)\n\n"
+        "Stocks with no news today are skipped. Failures on one stock do not stop the rest."
     ),
     response_model=JobTriggerResponse,
 )

@@ -1,14 +1,16 @@
 import os
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from starlette.responses import Response
 
 from database_client import db
 from routers.admin_routes import router as admin_router
@@ -30,6 +32,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def redirect_legacy_stock_page(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Browser refresh of the old /stocks/{id} page hit the API and returned 401.
+
+    Document navigations (Accept: text/html, no Authorization) are redirected to
+    /stock/{id}. Axios API calls keep Authorization and still hit /stocks/{id}.
+    """
+    path: str = request.url.path
+    parts: list[str] = [part for part in path.split("/") if part]
+    if (
+        request.method == "GET"
+        and len(parts) == 2
+        and parts[0] == "stocks"
+        and "authorization" not in request.headers
+        and "text/html" in request.headers.get("accept", "")
+    ):
+        return RedirectResponse(url=f"/stock/{parts[1]}", status_code=307)
+    return await call_next(request)
 
 app.include_router(auth_router)
 app.include_router(watchlist_router)

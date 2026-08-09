@@ -30,7 +30,7 @@ async def get_stock_history(
 @router.get("/{stock_id}/articles", response_model=list[StockArticle])
 async def list_stock_articles(
     stock_id: str = Path(..., description="Stock UUID"),
-    limit: int = Query(10, ge=1, le=50, description="Max number of articles"),
+    limit: int = Query(100, ge=1, le=200, description="Max number of articles"),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> list[StockArticle]:
     _ = user
