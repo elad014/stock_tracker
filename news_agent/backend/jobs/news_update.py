@@ -3,8 +3,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from llm_service_client import summarize
-from stock_manager_client import list_stocks, update_stock_summery
+from llm_service_client import LLMServiceClient
+from stock_manager_client import StockManagerClient
 from stock_provider_client import NewsItem, TwelveDataClient
 
 logger = logging.getLogger(__name__)
@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 
 def _provider() -> TwelveDataClient:
     return TwelveDataClient()
+
+
+def _llm_client() -> LLMServiceClient:
+    return LLMServiceClient()
+
+
+def _stock_manager_client() -> StockManagerClient:
+    return StockManagerClient()
 
 
 async def _run_provider(func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -52,9 +60,11 @@ def _to_float(value: Any) -> float | None:
 
 async def run_news_update() -> None:
     """Fetch news per stock, summarize via llm-service, persist via stock-manager."""
-    stocks = await list_stocks()
+    stock_manager = _stock_manager_client()
+    stocks = await stock_manager.list_stocks()
     logger.info("News update for %s stocks", len(stocks))
     provider = _provider()
+    llm_client = _llm_client()
 
     for stock in stocks:
         stock_id = str(stock.get("stock_id") or "")
@@ -74,7 +84,7 @@ async def run_news_update() -> None:
                 continue
 
             news_text = _build_news_text(news_items)
-            summary_result = await summarize(
+            summary_result = await llm_client.summarize(
                 news_text,
                 symbol=symbol,
                 close=_to_float(stock.get("close")),
@@ -88,7 +98,7 @@ async def run_news_update() -> None:
 
             newest = _newest_published_at(news_items)
             published_iso = newest.isoformat() if newest is not None else None
-            await update_stock_summery(
+            await stock_manager.update_stock_summery(
                 stock_id,
                 content,
                 stock_news_published_at=published_iso,

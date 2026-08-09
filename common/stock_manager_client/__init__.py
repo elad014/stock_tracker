@@ -1,33 +1,3 @@
-from stock_manager_client.client import (
-    add_to_watchlist,
-    clear_user_watchlist,
-    ensure_and_assign,
-    get_stock,
-    get_stock_by_symbol,
-    get_stock_history,
-    get_stock_summery,
-    is_on_watchlist,
-    list_stocks,
-    list_watchlist,
-    quote_to_watchlist_stock,
-    remove_from_watchlist,
-    unwatch_stock_everywhere,
-    update_stock_summery,
-)
+from stock_manager_client.client import StockManagerClient, stock_manager_client
 
-__all__ = [
-    "add_to_watchlist",
-    "clear_user_watchlist",
-    "ensure_and_assign",
-    "get_stock",
-    "get_stock_by_symbol",
-    "get_stock_history",
-    "get_stock_summery",
-    "is_on_watchlist",
-    "list_stocks",
-    "list_watchlist",
-    "quote_to_watchlist_stock",
-    "remove_from_watchlist",
-    "unwatch_stock_everywhere",
-    "update_stock_summery",
-]
+__all__ = ["StockManagerClient", "stock_manager_client"]

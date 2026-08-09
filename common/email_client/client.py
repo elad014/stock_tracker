@@ -5,11 +5,11 @@ from typing import Optional
 import httpx
 from dotenv import load_dotenv
 
+from constant import RESEND_API_URL
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-RESEND_API_URL = "https://api.resend.com/emails"
 
 
 class EmailClient:

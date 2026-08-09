@@ -1,51 +1,25 @@
 import os
-import re
-from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 import requests
 from dotenv import load_dotenv
 
+from constant import TWELVE_DATA_BASE_URL
+from stock_provider_client.util import (
+    NewsItem,
+    OHLCVBar,
+    QuoteData,
+    extract_news_rows,
+    parse_date,
+    parse_datetime,
+    strip_html,
+    to_float,
+    to_int,
+    to_optional_str,
+)
+
 load_dotenv()
-
-BASE_URL = "https://api.twelvedata.com"
-_HTML_TAG_RE = re.compile(r"<[^>]+>")
-
-
-@dataclass
-class QuoteData:
-    symbol: str
-    name: str
-    close: float | None
-    change: float | None
-    percent_change: float | None
-    previous_close: float | None = None
-    high: float | None = None
-    low: float | None = None
-    volume: int | None = None
-    fifty_two_week_high: float | None = None
-    fifty_two_week_low: float | None = None
-    exchange: str | None = None
-
-
-@dataclass
-class OHLCVBar:
-    date: date
-    open: float | None
-    high: float | None
-    low: float | None
-    close: float | None
-    volume: int | None
-
-
-@dataclass
-class NewsItem:
-    title: str
-    url: str | None
-    published_at: datetime | None
-    source: str | None
-    summary: str | None
 
 
 class TwelveDataClient:
@@ -64,7 +38,7 @@ class TwelveDataClient:
         params: dict[str, Any] | None = None,
         method: str = "GET",
     ) -> dict[str, Any]:
-        url = f"{BASE_URL}/{endpoint.lstrip('/')}"
+        url = f"{TWELVE_DATA_BASE_URL}/{endpoint.lstrip('/')}"
         query_params: dict[str, Any] = dict(params or {})
         query_params["apikey"] = self.api_key
 
@@ -112,19 +86,19 @@ class TwelveDataClient:
         fifty_two_week_high: float | None = None
         fifty_two_week_low: float | None = None
         if isinstance(fifty_two, dict):
-            fifty_two_week_high = _to_float(fifty_two.get("high"))
-            fifty_two_week_low = _to_float(fifty_two.get("low"))
+            fifty_two_week_high = to_float(fifty_two.get("high"))
+            fifty_two_week_low = to_float(fifty_two.get("low"))
 
         return QuoteData(
             symbol=str(data.get("symbol") or normalized).upper(),
             name=str(data.get("name") or normalized).strip(),
-            close=_to_float(data.get("close")),
-            change=_to_float(data.get("change")),
-            percent_change=_to_float(data.get("percent_change")),
-            previous_close=_to_float(data.get("previous_close")),
-            high=_to_float(data.get("high")),
-            low=_to_float(data.get("low")),
-            volume=_to_int(data.get("volume")),
+            close=to_float(data.get("close")),
+            change=to_float(data.get("change")),
+            percent_change=to_float(data.get("percent_change")),
+            previous_close=to_float(data.get("previous_close")),
+            high=to_float(data.get("high")),
+            low=to_float(data.get("low")),
+            volume=to_int(data.get("volume")),
             fifty_two_week_high=fifty_two_week_high,
             fifty_two_week_low=fifty_two_week_low,
             exchange=str(data["exchange"]) if data.get("exchange") else None,
@@ -149,17 +123,17 @@ class TwelveDataClient:
         values = data.get("values") or []
         bars: list[OHLCVBar] = []
         for row in values:
-            bar_date = _parse_date(row.get("datetime"))
+            bar_date = parse_date(row.get("datetime"))
             if bar_date is None:
                 continue
             bars.append(
                 OHLCVBar(
                     date=bar_date,
-                    open=_to_float(row.get("open")),
-                    high=_to_float(row.get("high")),
-                    low=_to_float(row.get("low")),
-                    close=_to_float(row.get("close")),
-                    volume=_to_int(row.get("volume")),
+                    open=to_float(row.get("open")),
+                    high=to_float(row.get("high")),
+                    low=to_float(row.get("low")),
+                    close=to_float(row.get("close")),
+                    volume=to_int(row.get("volume")),
                 )
             )
         return bars
@@ -191,7 +165,7 @@ class TwelveDataClient:
                 raise
             data = self.request("press_releases", params)
 
-        raw_items = _extract_news_rows(data)
+        raw_items = extract_news_rows(data)
         items: list[NewsItem] = []
         for row in raw_items[:size]:
             if not isinstance(row, dict):
@@ -211,99 +185,21 @@ class TwelveDataClient:
                 or row.get("body")
                 or row.get("snippet")
             )
-            summary = _strip_html(summary_raw)
+            summary = strip_html(summary_raw)
             items.append(
                 NewsItem(
                     title=title,
-                    url=_to_optional_str(row.get("url") or row.get("link")),
-                    published_at=_parse_datetime(
+                    url=to_optional_str(row.get("url") or row.get("link")),
+                    published_at=parse_datetime(
                         row.get("published_at")
                         or row.get("published")
                         or row.get("datetime")
                         or row.get("date")
                     ),
-                    source=_to_optional_str(
+                    source=to_optional_str(
                         row.get("source") or row.get("publisher") or row.get("author")
                     ),
                     summary=summary,
                 )
             )
         return items
-
-
-def _extract_news_rows(data: dict[str, Any] | list[Any]) -> list[Any]:
-    if isinstance(data, list):
-        return data
-    for key in ("data", "news", "articles", "press_releases", "values"):
-        value = data.get(key)
-        if isinstance(value, list):
-            return value
-    return []
-
-
-def _strip_html(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = _HTML_TAG_RE.sub(" ", str(value))
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or None
-
-
-def _to_optional_str(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _parse_datetime(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        pass
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(text[:19] if " " in text else text[:10], fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _to_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_int(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_date(value: Any) -> date | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError:
-        try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
-        except ValueError:
-            return None

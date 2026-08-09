@@ -12,43 +12,17 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 from litellm import acompletion
 
+from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS
+from llm_provider_client.util import LLMCompletionResult
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = "gemini/gemini-2.5-flash"
-
-_DEPRECATED_GEMINI_MODELS = {
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro",
-    "gemini-1.5-pro-latest",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini/gemini-1.5-flash",
-    "gemini/gemini-1.5-flash-8b",
-    "gemini/gemini-1.5-flash-latest",
-    "gemini/gemini-1.5-pro",
-    "gemini/gemini-1.5-pro-latest",
-    "gemini/gemini-2.0-flash",
-    "gemini/gemini-2.0-flash-lite",
-}
-
-
-@dataclass
-class LLMCompletionResult:
-    content: str
-    model: str
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    total_tokens: int | None = None
 
 
 class LLMProviderClient:
@@ -66,7 +40,7 @@ class LLMProviderClient:
                 "LLM model missing. Set LLM_MODEL in .env or pass model=..."
             )
 
-        if normalized in _DEPRECATED_GEMINI_MODELS:
+        if normalized in DEPRECATED_GEMINI_MODELS:
             logger.warning(
                 "Model %s is deprecated; using %s instead",
                 normalized,
@@ -79,7 +53,7 @@ class LLMProviderClient:
 
         if normalized.startswith("gemini"):
             candidate = f"gemini/{normalized}"
-            if candidate in _DEPRECATED_GEMINI_MODELS:
+            if candidate in DEPRECATED_GEMINI_MODELS:
                 logger.warning(
                     "Model %s is deprecated; using %s instead",
                     candidate,

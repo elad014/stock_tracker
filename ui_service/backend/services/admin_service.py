@@ -15,7 +15,7 @@ from models.admin import (
 )
 from models.auth import MessageResponse
 from models.watchlist import WatchlistStock
-import stock_manager_client as stock_manager
+from stock_manager_client import stock_manager_client as stock_manager
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
