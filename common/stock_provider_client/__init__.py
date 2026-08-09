@@ -1,4 +1,4 @@
 from stock_provider_client.twelv_data_client import TwelveDataClient
-from stock_provider_client.util import NewsItem, OHLCVBar, QuoteData
+from stock_provider_client.util import OHLCVBar, QuoteData
 
-__all__ = ["TwelveDataClient", "QuoteData", "OHLCVBar", "NewsItem"]
+__all__ = ["TwelveDataClient", "QuoteData", "OHLCVBar"]
