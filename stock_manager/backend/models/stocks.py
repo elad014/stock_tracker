@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -66,6 +67,10 @@ class StockQuoteResponse(BaseModel):
         None,
         description="AI / news summary for this stock",
     )
+    stock_news_published_at: Optional[datetime] = Field(
+        None,
+        description="Published time of the newest news article used for the summary",
+    )
 
 
 class UpdateStockSummeryRequest(BaseModel):
@@ -73,7 +78,8 @@ class UpdateStockSummeryRequest(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "stock_summery": "AAPL rose after strong iPhone sales guidance."
+                    "stock_summery": "AAPL rose after strong iPhone sales guidance. Outlook: UP",
+                    "stock_news_published_at": "2026-08-09T14:30:00Z",
                 }
             ]
         }
@@ -83,12 +89,17 @@ class UpdateStockSummeryRequest(BaseModel):
         None,
         description="News summary text to store on the quote (null clears it)",
     )
+    stock_news_published_at: Optional[datetime] = Field(
+        None,
+        description="Newest article published time from the news provider",
+    )
 
 
 class StockSummeryResponse(BaseModel):
     stock_id: str
     symbol: str
     stock_summery: Optional[str] = None
+    stock_news_published_at: Optional[datetime] = None
 
 
 class StockHistoryBar(BaseModel):

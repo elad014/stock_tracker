@@ -84,12 +84,18 @@ async def get_stock_summery(stock_id: str) -> dict[str, Any]:
 async def update_stock_summery(
     stock_id: str,
     stock_summery: Optional[str],
+    *,
+    stock_news_published_at: Optional[str] = None,
 ) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "stock_summery": stock_summery,
+        "stock_news_published_at": stock_news_published_at,
+    }
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.put(
             f"{STOCK_MANAGER_URL}/stocks/{stock_id}/summary",
             headers=_headers(),
-            json={"stock_summery": stock_summery},
+            json=body,
         )
     if response.status_code >= 400:
         _raise_from_response(response)
@@ -191,4 +197,5 @@ def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:
             payload.get("change") if payload.get("change") is not None else None
         ),
         "stock_summery": payload.get("stock_summery"),
+        "stock_news_published_at": payload.get("stock_news_published_at"),
     }

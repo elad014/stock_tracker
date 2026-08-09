@@ -10,13 +10,21 @@ QUOTES_TABLE = "stock_quotes"
 _QUOTE_COLUMNS = (
     "stock_id, symbol, name, close, change, percent_change, "
     "previous_close, high, low, volume, fifty_two_week_high, fifty_two_week_low, "
-    "stock_summery"
+    "stock_summery, stock_news_published_at"
 )
 _QUOTE_COLUMNS_Q = (
     "q.stock_id, q.symbol, q.name, q.close, q.change, q.percent_change, "
     "q.previous_close, q.high, q.low, q.volume, q.fifty_two_week_high, q.fifty_two_week_low, "
-    "q.stock_summery"
+    "q.stock_summery, q.stock_news_published_at"
 )
+
+
+def _normalize_published_at(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
 
 
 def _normalize_quote(row: dict[str, Any]) -> dict[str, Any]:
@@ -46,6 +54,9 @@ def _normalize_quote(row: dict[str, Any]) -> dict[str, Any]:
             else None
         ),
         "stock_summery": row.get("stock_summery"),
+        "stock_news_published_at": _normalize_published_at(
+            row.get("stock_news_published_at")
+        ),
     }
 
 
@@ -189,18 +200,21 @@ async def list_unwatched_stock_ids(
 async def update_stock_summery(
     stock_id: str,
     stock_summery: str | None,
+    stock_news_published_at: datetime | None = None,
     conn: Optional[asyncpg.Connection] = None,
 ) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
         f"""
         UPDATE {QUOTES_TABLE}
         SET stock_summery = $2,
-            updated_at = $3
+            stock_news_published_at = $3,
+            updated_at = $4
         WHERE stock_id = $1::uuid
         RETURNING {_QUOTE_COLUMNS}
         """,
         stock_id,
         stock_summery,
+        stock_news_published_at,
         datetime.utcnow(),
         conn=conn,
     )

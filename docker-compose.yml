@@ -45,3 +45,22 @@ services:
     environment:
       - PYTHONPATH=/app/common:/app/backend
     restart: unless-stopped
+
+  news-agent:
+    build:
+      context: .
+      dockerfile: news_agent/Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./news_agent/backend/.env
+    volumes:
+      - ./common:/app/common
+    environment:
+      - PYTHONPATH=/app/common:/app/backend
+      - STOCK_MANAGER_URL=http://stock-manager:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
+    depends_on:
+      - stock-manager
+      - llm-service
+    restart: unless-stopped
