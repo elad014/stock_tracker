@@ -1,15 +1,13 @@
-import os
 from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException
 
-LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002").rstrip("/")
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+from constant import INTERNAL_API_KEY, INTERNAL_API_KEY_HEADER, LLM_SERVICE_URL
 
 
 def _headers() -> dict[str, str]:
-    return {"X-Internal-Api-Key": INTERNAL_API_KEY}
+    return {INTERNAL_API_KEY_HEADER: INTERNAL_API_KEY}
 
 
 def _raise_from_response(response: httpx.Response) -> None:
