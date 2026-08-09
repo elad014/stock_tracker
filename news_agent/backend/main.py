@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from jobs.news_update import run_news_update
 from models.jobs import HealthResponse
+from routers.articles_routes import router as articles_router
 from routers.jobs_routes import router as jobs_router
 from routers.news_routes import router as news_router
 
@@ -34,6 +35,8 @@ News and agent endpoints require header:
 ## Swagger abilities
 1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
 2. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via llm-service -> update DB
+3. **Articles** — `POST /stocks/{stock_id}/articles/sync` to store a stock's articles, and
+   `POST /articles/{article_id}/summarize` to summarize one article once for all users
 
 News source: Finnhub (`FINNHUB_API_KEY`) via `common/news_provider_client`.
 """
@@ -95,12 +98,20 @@ app = FastAPI(
             ),
         },
         {
+            "name": "Articles",
+            "description": (
+                "Store per-article news for a stock and generate one shared "
+                "AI summary per article."
+            ),
+        },
+        {
             "name": "Health",
             "description": "Service liveness checks (no API key required).",
         },
     ],
 )
 app.include_router(news_router)
+app.include_router(articles_router)
 app.include_router(jobs_router)
 
 

@@ -3,16 +3,21 @@ from fastapi import APIRouter, Depends, Path, Query, status
 from deps import verify_internal_api_key
 from jobs.cleanup_archive import run_cleanup_archive
 from jobs.daily_update import run_daily_update
+import services.article_service as article_service
 import services.stock_service as stock_service
 from models.stocks import (
     AddWatchlistRequest,
+    ArticleResponse,
+    ClaimSummaryResponse,
     JobTriggerResponse,
     MessageResponse,
     RemoveWatchlistRequest,
     StockHistoryBar,
     StockQuoteResponse,
     StockSummeryResponse,
+    UpdateArticleSummaryRequest,
     UpdateStockSummeryRequest,
+    UpsertArticlesRequest,
 )
 
 router = APIRouter(
@@ -124,6 +129,93 @@ async def update_stock_summery(
         stock_id,
         req.stock_summery,
         stock_news_published_at=req.stock_news_published_at,
+    )
+
+
+@router.get(
+    "/stocks/{stock_id}/articles",
+    tags=["Articles"],
+    summary="List news articles linked to a stock",
+    description=(
+        "Returns articles stored for this stock, newest first, including the "
+        "cached AI summary and its status."
+    ),
+    response_model=list[ArticleResponse],
+    responses={404: {"description": "Stock not found"}},
+)
+async def list_stock_articles(
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+    limit: int = Query(10, ge=1, le=50, description="Max number of articles"),
+) -> list[ArticleResponse]:
+    return await article_service.list_stock_articles(stock_id, limit)
+
+
+@router.put(
+    "/stocks/{stock_id}/articles",
+    tags=["Articles"],
+    summary="Upsert articles and link them to a stock",
+    description=(
+        "Used by news-agent. Articles are deduplicated by URL, so an article "
+        "shared by several stocks is stored (and summarized) only once."
+    ),
+    response_model=list[ArticleResponse],
+    responses={404: {"description": "Stock not found"}},
+)
+async def upsert_stock_articles(
+    req: UpsertArticlesRequest,
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+) -> list[ArticleResponse]:
+    return await article_service.upsert_stock_articles(stock_id, req.articles)
+
+
+@router.get(
+    "/articles/{article_id}",
+    tags=["Articles"],
+    summary="Get a single article with its summary state",
+    response_model=ArticleResponse,
+    responses={404: {"description": "Article not found"}},
+)
+async def get_article(
+    article_id: str = Path(..., description="Article UUID"),
+) -> ArticleResponse:
+    return await article_service.get_article(article_id)
+
+
+@router.post(
+    "/articles/{article_id}/summary/claim",
+    tags=["Articles"],
+    summary="Atomically claim the right to summarize an article",
+    description=(
+        "Returns claimed=true to exactly one concurrent caller, which then does "
+        "the extraction and LLM call. Other callers get claimed=false plus the "
+        "current state, so the same article is never summarized twice."
+    ),
+    response_model=ClaimSummaryResponse,
+    responses={404: {"description": "Article not found"}},
+)
+async def claim_article_summary(
+    article_id: str = Path(..., description="Article UUID"),
+) -> ClaimSummaryResponse:
+    return await article_service.claim_article_summary(article_id)
+
+
+@router.put(
+    "/articles/{article_id}/summary",
+    tags=["Articles"],
+    summary="Store the generated article summary",
+    response_model=ArticleResponse,
+    responses={404: {"description": "Article not found"}},
+)
+async def update_article_summary(
+    req: UpdateArticleSummaryRequest,
+    article_id: str = Path(..., description="Article UUID"),
+) -> ArticleResponse:
+    return await article_service.update_article_summary(
+        article_id,
+        ai_summary=req.ai_summary,
+        ai_summary_status=req.ai_summary_status,
+        ai_summary_model=req.ai_summary_model,
+        ai_summary_error=req.ai_summary_error,
     )
 
 

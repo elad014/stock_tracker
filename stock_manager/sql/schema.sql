@@ -84,3 +84,43 @@ CREATE TABLE IF NOT EXISTS watchlist (
 );
 
 CREATE INDEX IF NOT EXISTS idx_watchlist_stock_id ON watchlist (stock_id);
+
+-- ---------------------------------------------------------------------------
+-- News articles fetched from the news provider
+-- One row per article URL, shared by every stock that references it, so the
+-- AI summary is generated once and reused by all users.
+-- url_hash is a sha256 hex digest because raw URLs can exceed the btree limit.
+-- ai_summary_status is one of: none, pending, ready, failed
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS news_articles (
+    article_id UUID PRIMARY KEY,
+    url_hash TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    source TEXT,
+    published_at TIMESTAMPTZ,
+    provider TEXT NOT NULL DEFAULT 'finnhub',
+    provider_article_id TEXT,
+    provider_summary TEXT,
+    ai_summary TEXT,
+    ai_summary_status TEXT NOT NULL DEFAULT 'none',
+    ai_summary_model TEXT,
+    ai_summary_error TEXT,
+    ai_summary_started_at TIMESTAMPTZ,
+    ai_summary_updated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_articles_published_at
+    ON news_articles (published_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Many-to-many link between stocks and articles
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stock_articles (
+    stock_id UUID NOT NULL REFERENCES stock_quotes (stock_id) ON DELETE CASCADE,
+    article_id UUID NOT NULL REFERENCES news_articles (article_id) ON DELETE CASCADE,
+    PRIMARY KEY (stock_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_articles_article_id ON stock_articles (article_id);

@@ -25,3 +25,17 @@ export interface StockHistoryBar {
 }
 
 export type HistoryRange = "1D" | "5D" | "1M" | "3M" | "6M" | "1Y" | "5Y";
+
+export type ArticleSummaryStatus = "none" | "pending" | "ready" | "failed";
+
+export interface StockArticle {
+  article_id: string;
+  url: string;
+  title: string;
+  source: string | null;
+  published_at: string | null;
+  provider_summary: string | null;
+  ai_summary: string | null;
+  ai_summary_status: ArticleSummaryStatus;
+  ai_summary_error: string | null;
+}

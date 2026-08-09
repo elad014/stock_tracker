@@ -10,3 +10,4 @@ python-multipart
 requests
 apscheduler
 litellm
+trafilatura

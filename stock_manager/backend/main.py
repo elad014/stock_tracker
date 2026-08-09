@@ -32,6 +32,7 @@ Use the **Authorize** button in Swagger and paste the same key configured in `.e
 ## Responsibilities
 - Validate symbols via Twelve Data
 - Maintain `stock_quotes`, `stock_history`, `watchlist`
+- Maintain `news_articles` + `stock_articles` with one shared AI summary per article
 - Restore from `stock_history_archive` when possible
 - Background jobs: daily quote/history update + unwatched cleanup/archive
 """
@@ -104,6 +105,12 @@ app = FastAPI(
         {
             "name": "News",
             "description": "Read/update AI news summaries stored on stock_quotes.stock_summery.",
+        },
+        {
+            "name": "Articles",
+            "description": (
+                "Per-article news storage with one shared AI summary per article URL."
+            ),
         },
         {
             "name": "Health",

@@ -5,6 +5,7 @@ from typing import Any
 
 from llm_service_client import LLMServiceClient
 from news_provider_client import NewsItem, NewsProviderClient
+from services.article_service import to_article_payload
 from stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,10 @@ async def run_news_update() -> None:
             if not news_items:
                 logger.info("No news for %s; skipping summary update", symbol)
                 continue
+
+            payload = to_article_payload(news_items)
+            if payload:
+                await stock_manager.upsert_stock_articles(stock_id, payload)
 
             news_text = _build_news_text(news_items)
             summary_result = await llm_client.summarize(
