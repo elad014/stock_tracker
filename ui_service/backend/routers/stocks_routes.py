@@ -14,8 +14,7 @@ async def get_stock_details(
     stock_id: str = Path(..., description="Stock UUID"),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> StockDetails:
-    _ = user
-    return await stocks_service.get_stock_details(stock_id)
+    return await stocks_service.get_stock_details(stock_id, str(user["id"]))
 
 
 @router.get("/{stock_id}/history", response_model=list[StockHistoryBar])

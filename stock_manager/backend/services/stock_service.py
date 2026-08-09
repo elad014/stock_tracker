@@ -12,7 +12,12 @@ from db_logics import archive_db_logic as archive_db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
 from db_logics import watchlist_db_logic as watchlist_db
-from models.stocks import MessageResponse, StockHistoryBar, StockQuoteResponse
+from models.stocks import (
+    MessageResponse,
+    StockHistoryBar,
+    StockQuoteResponse,
+    StockSummeryResponse,
+)
 from stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
 
 _HISTORY_RANGE_DAYS: dict[str, int | None] = {
@@ -78,6 +83,7 @@ def _quote_to_response(
         volume=row.get("volume"),
         fifty_two_week_high=row.get("fifty_two_week_high"),
         fifty_two_week_low=row.get("fifty_two_week_low"),
+        stock_summery=row.get("stock_summery"),
     )
 
 
@@ -330,6 +336,34 @@ async def get_stock_by_symbol(symbol: str) -> StockQuoteResponse:
     latest = await history_db.get_latest_bar(existing["stock_id"])
     open_price = latest.get("open") if latest else None
     return _quote_to_response(existing, open_price=open_price)
+
+
+async def get_stock_summery(stock_id: str) -> StockSummeryResponse:
+    existing = await quotes_db.get_by_id(stock_id)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return StockSummeryResponse(
+        stock_id=existing["stock_id"],
+        symbol=existing["symbol"],
+        stock_summery=existing.get("stock_summery"),
+    )
+
+
+async def update_stock_summery(
+    stock_id: str,
+    stock_summery: str | None,
+) -> StockSummeryResponse:
+    normalized = stock_summery.strip() if stock_summery is not None else None
+    if normalized == "":
+        normalized = None
+    updated = await quotes_db.update_stock_summery(stock_id, normalized)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
+    return StockSummeryResponse(
+        stock_id=updated["stock_id"],
+        symbol=updated["symbol"],
+        stock_summery=updated.get("stock_summery"),
+    )
 
 
 async def get_stock_history(

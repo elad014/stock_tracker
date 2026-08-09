@@ -17,7 +17,6 @@ import {
 type NewsItem = {
   id: string;
   headline: string;
-  source: string;
   relatedSymbol: string;
 };
 
@@ -26,33 +25,6 @@ type ChatMessage = {
   role: "user" | "assistant";
   text: string;
 };
-
-const MOCK_NEWS: NewsItem[] = [
-  {
-    id: "1",
-    headline: "Apple unveils new product roadmap amid strong services growth",
-    source: "Market Wire",
-    relatedSymbol: "AAPL",
-  },
-  {
-    id: "2",
-    headline: "Microsoft cloud revenue continues to outpace expectations",
-    source: "Finance Daily",
-    relatedSymbol: "MSFT",
-  },
-  {
-    id: "3",
-    headline: "Tesla delivery figures spark debate among analysts",
-    source: "Auto Brief",
-    relatedSymbol: "TSLA",
-  },
-  {
-    id: "4",
-    headline: "Tech stocks mixed as investors weigh rate outlook",
-    source: "Market Wire",
-    relatedSymbol: "AAPL",
-  },
-];
 
 export default function DashboardPage(): JSX.Element {
   const navigate = useNavigate();
@@ -168,11 +140,16 @@ export default function DashboardPage(): JSX.Element {
     setChatInput("");
   }
 
-  const visibleNews: NewsItem[] = MOCK_NEWS.filter(
-    (item: NewsItem) =>
-      stocks.length === 0 ||
-      stocks.some((s: WatchlistStock) => s.symbol === item.relatedSymbol),
-  );
+  const visibleNews: NewsItem[] = stocks
+    .filter(
+      (stock: WatchlistStock) =>
+        typeof stock.stock_summery === "string" && stock.stock_summery.trim() !== "",
+    )
+    .map((stock: WatchlistStock) => ({
+      id: stock.id,
+      relatedSymbol: stock.symbol,
+      headline: stock.stock_summery as string,
+    }));
 
   return (
     <div className="dashboard-page">
@@ -313,7 +290,6 @@ export default function DashboardPage(): JSX.Element {
                 <li key={item.id} className="news-item">
                   <span className="news-symbol">{item.relatedSymbol}</span>
                   <p className="news-headline">{item.headline}</p>
-                  <span className="news-source">{item.source}</span>
                 </li>
               ))}
             </ul>

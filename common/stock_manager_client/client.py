@@ -70,6 +70,32 @@ async def get_stock_history(
     return response.json()
 
 
+async def get_stock_summery(stock_id: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/summary",
+            headers=_headers(),
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
+async def update_stock_summery(
+    stock_id: str,
+    stock_summery: Optional[str],
+) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.put(
+            f"{STOCK_MANAGER_URL}/stocks/{stock_id}/summary",
+            headers=_headers(),
+            json={"stock_summery": stock_summery},
+        )
+    if response.status_code >= 400:
+        _raise_from_response(response)
+    return response.json()
+
+
 async def get_stock_by_symbol(symbol: str) -> Optional[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
@@ -164,4 +190,5 @@ def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:
         "change": (
             payload.get("change") if payload.get("change") is not None else None
         ),
+        "stock_summery": payload.get("stock_summery"),
     }

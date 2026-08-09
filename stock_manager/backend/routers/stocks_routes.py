@@ -11,6 +11,8 @@ from models.stocks import (
     RemoveWatchlistRequest,
     StockHistoryBar,
     StockQuoteResponse,
+    StockSummeryResponse,
+    UpdateStockSummeryRequest,
 )
 
 router = APIRouter(
@@ -88,6 +90,34 @@ async def get_stock_history(
     ),
 ) -> list[StockHistoryBar]:
     return await stock_service.get_stock_history(stock_id, range)
+
+
+@router.get(
+    "/stocks/{stock_id}/summary",
+    tags=["News"],
+    summary="Get stock news summary",
+    response_model=StockSummeryResponse,
+    responses={404: {"description": "Stock not found"}},
+)
+async def get_stock_summery(
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+) -> StockSummeryResponse:
+    return await stock_service.get_stock_summery(stock_id)
+
+
+@router.put(
+    "/stocks/{stock_id}/summary",
+    tags=["News"],
+    summary="Update stock news summary",
+    description="Used by news-agent to persist AI news summaries on stock_quotes.stock_summery.",
+    response_model=StockSummeryResponse,
+    responses={404: {"description": "Stock not found"}},
+)
+async def update_stock_summery(
+    req: UpdateStockSummeryRequest,
+    stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
+) -> StockSummeryResponse:
+    return await stock_service.update_stock_summery(stock_id, req.stock_summery)
 
 
 @router.get(

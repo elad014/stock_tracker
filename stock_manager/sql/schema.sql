@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS stock_quotes (
     volume BIGINT,
     fifty_two_week_high NUMERIC,
     fifty_two_week_low NUMERIC,
+    stock_summery TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

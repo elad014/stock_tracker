@@ -250,6 +250,13 @@ export default function StockDetailsPage(): JSX.Element {
                 </div>
               </div>
             </section>
+
+            {stock.stock_summery ? (
+              <section className="dashboard-panel stock-news-panel">
+                <h2>News Summary</h2>
+                <p className="stock-news-summary">{stock.stock_summery}</p>
+              </section>
+            ) : null}
           </>
         ) : null}
       </main>

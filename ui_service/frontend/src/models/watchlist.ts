@@ -3,4 +3,5 @@ export interface WatchlistStock {
   symbol: string;
   price: number | null;
   change: number | null;
+  stock_summery: string | null;
 }
