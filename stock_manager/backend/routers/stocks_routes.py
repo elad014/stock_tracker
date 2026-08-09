@@ -109,7 +109,10 @@ async def get_stock_summery(
     "/stocks/{stock_id}/summary",
     tags=["News"],
     summary="Update stock news summary",
-    description="Used by news-agent to persist AI news summaries on stock_quotes.stock_summery.",
+    description=(
+        "Used by news-agent to persist AI news summaries on "
+        "stock_quotes.stock_summery and stock_news_published_at."
+    ),
     response_model=StockSummeryResponse,
     responses={404: {"description": "Stock not found"}},
 )
@@ -117,7 +120,11 @@ async def update_stock_summery(
     req: UpdateStockSummeryRequest,
     stock_id: str = Path(..., description="Stock UUID from stock_quotes.stock_id"),
 ) -> StockSummeryResponse:
-    return await stock_service.update_stock_summery(stock_id, req.stock_summery)
+    return await stock_service.update_stock_summery(
+        stock_id,
+        req.stock_summery,
+        stock_news_published_at=req.stock_news_published_at,
+    )
 
 
 @router.get(

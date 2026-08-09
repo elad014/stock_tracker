@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -9,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_URL = "https://api.twelvedata.com"
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 @dataclass
@@ -35,6 +37,15 @@ class OHLCVBar:
     low: float | None
     close: float | None
     volume: int | None
+
+
+@dataclass
+class NewsItem:
+    title: str
+    url: str | None
+    published_at: datetime | None
+    source: str | None
+    summary: str | None
 
 
 class TwelveDataClient:
@@ -161,6 +172,108 @@ class TwelveDataClient:
                     return bool(item.get("is_market_open"))
             return bool(data[0].get("is_market_open")) if data else False
         return bool(data.get("is_market_open"))
+
+    def get_news(self, symbol: str, outputsize: int = 5) -> list[NewsItem]:
+        """Fetch recent news/articles for a symbol.
+
+        Prefers GET /news; falls back to /press_releases when /news is unavailable.
+        """
+        normalized = symbol.strip().upper()
+        size = max(1, int(outputsize))
+        params: dict[str, Any] = {"symbol": normalized, "outputsize": size}
+
+        data: dict[str, Any] | list[Any]
+        try:
+            data = self.request("news", params)
+        except RuntimeError as exc:
+            message = str(exc).lower()
+            if "404" not in message and "not found" not in message:
+                raise
+            data = self.request("press_releases", params)
+
+        raw_items = _extract_news_rows(data)
+        items: list[NewsItem] = []
+        for row in raw_items[:size]:
+            if not isinstance(row, dict):
+                continue
+            title = str(
+                row.get("title")
+                or row.get("headline")
+                or row.get("name")
+                or ""
+            ).strip()
+            if not title:
+                continue
+            summary_raw = (
+                row.get("summary")
+                or row.get("description")
+                or row.get("content")
+                or row.get("body")
+                or row.get("snippet")
+            )
+            summary = _strip_html(summary_raw)
+            items.append(
+                NewsItem(
+                    title=title,
+                    url=_to_optional_str(row.get("url") or row.get("link")),
+                    published_at=_parse_datetime(
+                        row.get("published_at")
+                        or row.get("published")
+                        or row.get("datetime")
+                        or row.get("date")
+                    ),
+                    source=_to_optional_str(
+                        row.get("source") or row.get("publisher") or row.get("author")
+                    ),
+                    summary=summary,
+                )
+            )
+        return items
+
+
+def _extract_news_rows(data: dict[str, Any] | list[Any]) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    for key in ("data", "news", "articles", "press_releases", "values"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _strip_html(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = _HTML_TAG_RE.sub(" ", str(value))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None
+
+
+def _to_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text[:19] if " " in text else text[:10], fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _to_float(value: Any) -> float | None:

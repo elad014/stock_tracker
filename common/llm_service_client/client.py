@@ -66,12 +66,21 @@ async def summarize(
     text: str,
     *,
     symbol: Optional[str] = None,
+    close: Optional[float] = None,
+    change: Optional[float] = None,
+    percent_change: Optional[float] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {"text": text}
     if symbol is not None:
         body["symbol"] = symbol
+    if close is not None:
+        body["close"] = close
+    if change is not None:
+        body["change"] = change
+    if percent_change is not None:
+        body["percent_change"] = percent_change
     if temperature is not None:
         body["temperature"] = temperature
     if max_tokens is not None:

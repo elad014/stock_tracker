@@ -1,0 +1,104 @@
+import asyncio
+import logging
+from datetime import datetime
+from typing import Any
+
+from llm_service_client import summarize
+from stock_manager_client import list_stocks, update_stock_summery
+from stock_provider_client import NewsItem, TwelveDataClient
+
+logger = logging.getLogger(__name__)
+
+
+def _provider() -> TwelveDataClient:
+    return TwelveDataClient()
+
+
+async def _run_provider(func: Any, *args: Any, **kwargs: Any) -> Any:
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+
+def _build_news_text(items: list[NewsItem]) -> str:
+    blocks: list[str] = []
+    for index, item in enumerate(items, start=1):
+        lines = [f"{index}. {item.title}"]
+        if item.source:
+            lines.append(f"Source: {item.source}")
+        if item.published_at is not None:
+            lines.append(f"Published: {item.published_at.isoformat()}")
+        if item.url:
+            lines.append(f"URL: {item.url}")
+        if item.summary:
+            lines.append(item.summary)
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _newest_published_at(items: list[NewsItem]) -> datetime | None:
+    published = [item.published_at for item in items if item.published_at is not None]
+    if not published:
+        return None
+    return max(published)
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+async def run_news_update() -> None:
+    """Fetch news per stock, summarize via llm-service, persist via stock-manager."""
+    stocks = await list_stocks()
+    logger.info("News update for %s stocks", len(stocks))
+    provider = _provider()
+
+    for stock in stocks:
+        stock_id = str(stock.get("stock_id") or "")
+        symbol = str(stock.get("symbol") or "").strip().upper()
+        if not stock_id or not symbol:
+            logger.warning("Skipping stock with missing id/symbol: %s", stock)
+            continue
+
+        try:
+            news_items: list[NewsItem] = await _run_provider(
+                provider.get_news,
+                symbol,
+                5,
+            )
+            if not news_items:
+                logger.info("No news for %s; skipping summary update", symbol)
+                continue
+
+            news_text = _build_news_text(news_items)
+            summary_result = await summarize(
+                news_text,
+                symbol=symbol,
+                close=_to_float(stock.get("close")),
+                change=_to_float(stock.get("change")),
+                percent_change=_to_float(stock.get("percent_change")),
+            )
+            content = str(summary_result.get("content") or "").strip()
+            if not content:
+                logger.warning("Empty LLM summary for %s; skipping update", symbol)
+                continue
+
+            newest = _newest_published_at(news_items)
+            published_iso = newest.isoformat() if newest is not None else None
+            await update_stock_summery(
+                stock_id,
+                content,
+                stock_news_published_at=published_iso,
+            )
+            logger.info(
+                "Updated summary for %s (articles=%s, published_at=%s)",
+                symbol,
+                len(news_items),
+                published_iso,
+            )
+        except Exception:
+            logger.exception("News update failed for %s", symbol)
+            continue

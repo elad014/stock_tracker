@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS stock_quotes (
     fifty_two_week_high NUMERIC,
     fifty_two_week_low NUMERIC,
     stock_summery TEXT,
+    stock_news_published_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

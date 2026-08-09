@@ -123,6 +123,19 @@ async def clear_session(user_id: str) -> None:
         session_store.clear(normalized)
 
 
+def _format_quote_context(request: SummarizeRequest) -> str:
+    parts: list[str] = []
+    if request.close is not None:
+        parts.append(f"close={request.close}")
+    if request.change is not None:
+        parts.append(f"change={request.change}")
+    if request.percent_change is not None:
+        parts.append(f"percent_change={request.percent_change}")
+    if not parts:
+        return ""
+    return "Current quote: " + ", ".join(parts) + ".\n"
+
+
 async def summarize(request: SummarizeRequest) -> SummarizeResponse:
     text = request.text.strip()
     if not text:
@@ -130,18 +143,18 @@ async def summarize(request: SummarizeRequest) -> SummarizeResponse:
 
     max_tokens = request.max_tokens if request.max_tokens is not None else _default_max_tokens()
     symbol = request.symbol.strip().upper() if request.symbol else None
+    quote_block = _format_quote_context(request)
+    subject = f" about {symbol}" if symbol else ""
 
-    if symbol:
-        prompt = (
-            f"Summarize the following financial news about {symbol} "
-            "in 2-4 clear sentences for an investor:\n\n"
-            f"{text}"
-        )
-    else:
-        prompt = (
-            "Summarize the following financial news in 2-4 clear sentences "
-            f"for an investor:\n\n{text}"
-        )
+    prompt = (
+        f"You are helping an investor review financial news{subject}.\n"
+        f"{quote_block}"
+        "Using the articles below, respond with:\n"
+        "1) A short news summary in 2-4 clear sentences.\n"
+        "2) A final line exactly in the form: Outlook: UP|DOWN|NEUTRAL\n"
+        "Choose the outlook from the news tone and the current quote state.\n\n"
+        f"{text}"
+    )
 
     messages: list[dict[str, str]] = []
     system_prompt = _system_prompt()

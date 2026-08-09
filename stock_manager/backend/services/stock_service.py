@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -84,6 +84,7 @@ def _quote_to_response(
         fifty_two_week_high=row.get("fifty_two_week_high"),
         fifty_two_week_low=row.get("fifty_two_week_low"),
         stock_summery=row.get("stock_summery"),
+        stock_news_published_at=row.get("stock_news_published_at"),
     )
 
 
@@ -346,23 +347,30 @@ async def get_stock_summery(stock_id: str) -> StockSummeryResponse:
         stock_id=existing["stock_id"],
         symbol=existing["symbol"],
         stock_summery=existing.get("stock_summery"),
+        stock_news_published_at=existing.get("stock_news_published_at"),
     )
 
 
 async def update_stock_summery(
     stock_id: str,
     stock_summery: str | None,
+    stock_news_published_at: datetime | None = None,
 ) -> StockSummeryResponse:
     normalized = stock_summery.strip() if stock_summery is not None else None
     if normalized == "":
         normalized = None
-    updated = await quotes_db.update_stock_summery(stock_id, normalized)
+    updated = await quotes_db.update_stock_summery(
+        stock_id,
+        normalized,
+        stock_news_published_at=stock_news_published_at,
+    )
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
     return StockSummeryResponse(
         stock_id=updated["stock_id"],
         symbol=updated["symbol"],
         stock_summery=updated.get("stock_summery"),
+        stock_news_published_at=updated.get("stock_news_published_at"),
     )
 
 
