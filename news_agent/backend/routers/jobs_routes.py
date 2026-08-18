@@ -8,19 +8,22 @@ router = APIRouter(
     dependencies=[Depends(verify_internal_api_key)],
     responses={
         401: {"description": "Missing or invalid X-Internal-Api-Key"},
-        500: {"description": "INTERNAL_API_KEY not configured on server"},
+        500: {"description": "INTERNAL_API_KEY or FINNHUB_API_KEY not configured"},
     },
 )
 
 
 @router.post(
     "/jobs/news-update",
-    tags=["Jobs"],
-    summary="Trigger news summary update",
+    tags=["Agent"],
+    summary="Trigger agent: news -> LLM summary -> DB update (all stocks)",
     description=(
-        "Manually runs the news cron job: list stocks from stock-manager, "
-        "fetch Twelve Data news, summarize via llm-service, and update "
-        "stock_summery / stock_news_published_at when news exists."
+        "Runs the full news agent for **all** stocks, one stock at a time:\n\n"
+        "1. List stocks from stock-manager\n"
+        "2. Fetch Finnhub company news for that stock\n"
+        "3. Send news text to llm-service `/summarize`\n"
+        "4. Update `stock_summery` + `stock_news_published_at` via stock-manager\n\n"
+        "Stocks with no news are skipped. Failures on one stock do not stop the rest."
     ),
     response_model=JobTriggerResponse,
 )

@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from jobs.news_update import run_news_update
 from models.jobs import HealthResponse
 from routers.jobs_routes import router as jobs_router
+from routers.news_routes import router as news_router
 
 load_dotenv()
 
@@ -26,16 +27,15 @@ Internal News Agent for stock_tracker.
 Orchestrates the news summary pipeline only — no direct DB or LiteLLM access.
 
 ## Auth
-Manual job triggers require header:
+News and agent endpoints require header:
 
 `X-Internal-Api-Key: <INTERNAL_API_KEY>`
 
-## Flow
-1. List stocks via stock-manager
-2. Fetch Twelve Data news per symbol
-3. Skip when no news
-4. Summarize via llm-service (UP/DOWN/NEUTRAL outlook)
-5. Persist summary + newest article time via stock-manager
+## Swagger abilities
+1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
+2. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via llm-service -> update DB
+
+News source: Finnhub (`FINNHUB_API_KEY`) via `common/news_provider_client`.
 """
 
 
@@ -84,8 +84,15 @@ app = FastAPI(
     swagger_ui_parameters={"persistAuthorization": True},
     openapi_tags=[
         {
-            "name": "Jobs",
-            "description": "Manually trigger the news summary cron job.",
+            "name": "News",
+            "description": "Get Finnhub news articles for a specific stock (read-only).",
+        },
+        {
+            "name": "Agent",
+            "description": (
+                "Trigger the full pipeline: all stocks, one-by-one Finnhub news fetch, "
+                "LLM summary, then DB update."
+            ),
         },
         {
             "name": "Health",
@@ -93,6 +100,7 @@ app = FastAPI(
         },
     ],
 )
+app.include_router(news_router)
 app.include_router(jobs_router)
 
 

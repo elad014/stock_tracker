@@ -7,16 +7,11 @@ from dotenv import load_dotenv
 
 from constant import TWELVE_DATA_BASE_URL
 from stock_provider_client.util import (
-    NewsItem,
     OHLCVBar,
     QuoteData,
-    extract_news_rows,
     parse_date,
-    parse_datetime,
-    strip_html,
     to_float,
     to_int,
-    to_optional_str,
 )
 
 load_dotenv()
@@ -146,60 +141,3 @@ class TwelveDataClient:
                     return bool(item.get("is_market_open"))
             return bool(data[0].get("is_market_open")) if data else False
         return bool(data.get("is_market_open"))
-
-    def get_news(self, symbol: str, outputsize: int = 5) -> list[NewsItem]:
-        """Fetch recent news/articles for a symbol.
-
-        Prefers GET /news; falls back to /press_releases when /news is unavailable.
-        """
-        normalized = symbol.strip().upper()
-        size = max(1, int(outputsize))
-        params: dict[str, Any] = {"symbol": normalized, "outputsize": size}
-
-        data: dict[str, Any] | list[Any]
-        try:
-            data = self.request("news", params)
-        except RuntimeError as exc:
-            message = str(exc).lower()
-            if "404" not in message and "not found" not in message:
-                raise
-            data = self.request("press_releases", params)
-
-        raw_items = extract_news_rows(data)
-        items: list[NewsItem] = []
-        for row in raw_items[:size]:
-            if not isinstance(row, dict):
-                continue
-            title = str(
-                row.get("title")
-                or row.get("headline")
-                or row.get("name")
-                or ""
-            ).strip()
-            if not title:
-                continue
-            summary_raw = (
-                row.get("summary")
-                or row.get("description")
-                or row.get("content")
-                or row.get("body")
-                or row.get("snippet")
-            )
-            summary = strip_html(summary_raw)
-            items.append(
-                NewsItem(
-                    title=title,
-                    url=to_optional_str(row.get("url") or row.get("link")),
-                    published_at=parse_datetime(
-                        row.get("published_at")
-                        or row.get("published")
-                        or row.get("datetime")
-                        or row.get("date")
-                    ),
-                    source=to_optional_str(
-                        row.get("source") or row.get("publisher") or row.get("author")
-                    ),
-                    summary=summary,
-                )
-            )
-        return items

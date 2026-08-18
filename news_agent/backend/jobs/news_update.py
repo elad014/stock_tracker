@@ -4,14 +4,14 @@ from datetime import datetime
 from typing import Any
 
 from llm_service_client import LLMServiceClient
+from news_provider_client import NewsItem, NewsProviderClient
 from stock_manager_client import StockManagerClient
-from stock_provider_client import NewsItem, TwelveDataClient
 
 logger = logging.getLogger(__name__)
 
 
-def _provider() -> TwelveDataClient:
-    return TwelveDataClient()
+def _news_provider() -> NewsProviderClient:
+    return NewsProviderClient()
 
 
 def _llm_client() -> LLMServiceClient:
@@ -59,11 +59,11 @@ def _to_float(value: Any) -> float | None:
 
 
 async def run_news_update() -> None:
-    """Fetch news per stock, summarize via llm-service, persist via stock-manager."""
+    """Fetch news per stock via Finnhub, summarize via llm-service, persist via stock-manager."""
     stock_manager = _stock_manager_client()
     stocks = await stock_manager.list_stocks()
     logger.info("News update for %s stocks", len(stocks))
-    provider = _provider()
+    news_provider = _news_provider()
     llm_client = _llm_client()
 
     for stock in stocks:
@@ -75,7 +75,7 @@ async def run_news_update() -> None:
 
         try:
             news_items: list[NewsItem] = await _run_provider(
-                provider.get_news,
+                news_provider.get_news,
                 symbol,
                 5,
             )

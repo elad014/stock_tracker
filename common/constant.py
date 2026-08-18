@@ -6,6 +6,7 @@ INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key"
 
 TWELVE_DATA_BASE_URL = "https://api.twelvedata.com"
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 RESEND_API_URL = "https://api.resend.com/emails"
 
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"
