@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -27,3 +28,15 @@ class StockHistoryBar(BaseModel):
     low: Optional[float] = None
     close: Optional[float] = None
     volume: Optional[int] = None
+
+
+class StockArticle(BaseModel):
+    article_id: str
+    url: str
+    title: str
+    source: Optional[str] = None
+    published_at: Optional[datetime] = None
+    provider_summary: Optional[str] = None
+    ai_summary: Optional[str] = None
+    ai_summary_status: str = Field(..., description="none | pending | ready | failed")
+    ai_summary_error: Optional[str] = None

@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
-from models.stocks import StockDetails, StockHistoryBar
+from models.stocks import StockArticle, StockDetails, StockHistoryBar
+from news_agent_client import news_agent_client as news_agent
 from stock_manager_client import stock_manager_client as stock_manager
 
 
@@ -40,3 +41,39 @@ async def get_stock_history(
 ) -> list[StockHistoryBar]:
     rows = await stock_manager.get_stock_history(stock_id, range_key)
     return [StockHistoryBar(**row) for row in rows]
+
+
+def _to_article(payload: dict[str, Any]) -> StockArticle:
+    return StockArticle(
+        article_id=str(payload.get("article_id")),
+        url=str(payload.get("url") or ""),
+        title=str(payload.get("title") or ""),
+        source=payload.get("source"),
+        published_at=payload.get("published_at"),
+        provider_summary=payload.get("provider_summary"),
+        ai_summary=payload.get("ai_summary"),
+        ai_summary_status=str(payload.get("ai_summary_status") or "none"),
+        ai_summary_error=payload.get("ai_summary_error"),
+    )
+
+
+async def list_stock_articles(stock_id: str, limit: int = 100) -> list[StockArticle]:
+    """Read-only: articles are filled by news-agent cron / Swagger, never by the user."""
+    rows = await stock_manager.list_stock_articles(stock_id, limit)
+    return [_to_article(row) for row in rows]
+
+
+async def summarize_stock_article(stock_id: str, article_id: str) -> StockArticle:
+    _ = stock_id
+    result = await news_agent.summarize_article(article_id)
+    return StockArticle(
+        article_id=str(result.get("article_id")),
+        url=str(result.get("url") or ""),
+        title=str(result.get("title") or ""),
+        source=None,
+        published_at=None,
+        provider_summary=None,
+        ai_summary=result.get("ai_summary"),
+        ai_summary_status=str(result.get("status") or "none"),
+        ai_summary_error=result.get("ai_summary_error"),
+    )

@@ -10,6 +10,7 @@ import {
   formatPrice,
   formatVolume,
 } from "../../utils/formatters";
+import StockNewsArticles from "../components/StockNewsArticles";
 import StockPriceChart from "../components/StockPriceChart";
 
 const HISTORY_RANGES: HistoryRange[] = ["1D", "5D", "1M", "3M", "6M", "1Y", "5Y"];
@@ -257,6 +258,8 @@ export default function StockDetailsPage(): JSX.Element {
                 <p className="stock-news-summary">{stock.stock_summery}</p>
               </section>
             ) : null}
+
+            <StockNewsArticles stockId={stock.id} />
           </>
         ) : null}
       </main>

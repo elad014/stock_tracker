@@ -7,8 +7,8 @@ Environment variables:
 from __future__ import annotations
 
 import os
-from datetime import date, timedelta
-from typing import Any
+from datetime import date
+from typing import Any, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -54,40 +54,21 @@ class NewsProviderClient:
 
         return response.json()
 
-    def get_news(
+    def _parse_items(
         self,
-        symbol: str,
-        outputsize: int = 5,
+        data: Any,
         *,
-        lookback_days: int = 7,
+        symbol: str,
+        limit: Optional[int] = None,
     ) -> list[NewsItem]:
-        """Fetch recent company news for a symbol via Finnhub `/company-news`."""
-        normalized = symbol.strip().upper()
-        if not normalized:
-            raise ValueError("symbol must not be empty")
-
-        size = max(1, int(outputsize))
-        days = max(1, int(lookback_days))
-        end = date.today()
-        start = end - timedelta(days=days)
-
-        data = self.request(
-            "company-news",
-            {
-                "symbol": normalized,
-                "from": start.isoformat(),
-                "to": end.isoformat(),
-            },
-        )
-
         if not isinstance(data, list):
             message = ""
             if isinstance(data, dict):
                 message = str(data.get("error") or data.get("message") or "")
             if "not found" in message.lower():
-                raise RuntimeError(f"Symbol not found: {normalized}") from None
+                raise RuntimeError(f"Symbol not found: {symbol}") from None
             raise RuntimeError(
-                f"Finnhub returned unexpected company-news payload for {normalized}"
+                f"Finnhub returned unexpected company-news payload for {symbol}"
             )
 
         items: list[NewsItem] = []
@@ -106,6 +87,43 @@ class NewsProviderClient:
                     summary=to_optional_str(row.get("summary")),
                 )
             )
-            if len(items) >= size:
+            if limit is not None and len(items) >= limit:
                 break
         return items
+
+    def get_news(
+        self,
+        symbol: str,
+        *,
+        start: date,
+        end: date,
+        limit: Optional[int] = None,
+    ) -> list[NewsItem]:
+        """Fetch company news for ``symbol`` between ``start`` and ``end`` (inclusive).
+
+        Pass ``limit=None`` to keep every article Finnhub returns for that window.
+        """
+        normalized = symbol.strip().upper()
+        if not normalized:
+            raise ValueError("symbol must not be empty")
+        if end < start:
+            raise ValueError("end date must be on or after start date")
+
+        data = self.request(
+            "company-news",
+            {
+                "symbol": normalized,
+                "from": start.isoformat(),
+                "to": end.isoformat(),
+            },
+        )
+        return self._parse_items(data, symbol=normalized, limit=limit)
+
+    def get_news_for_day(
+        self,
+        symbol: str,
+        day: Optional[date] = None,
+    ) -> list[NewsItem]:
+        """Fetch every Finnhub article published on one calendar day."""
+        target = day or date.today()
+        return self.get_news(symbol, start=target, end=target, limit=None)

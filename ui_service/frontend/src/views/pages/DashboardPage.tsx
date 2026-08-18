@@ -256,11 +256,11 @@ export default function DashboardPage(): JSX.Element {
                     <tr
                       key={stock.id}
                       className="stocks-table-row-clickable"
-                      onClick={() => navigate(`/stocks/${stock.id}`)}
+                      onClick={() => navigate(`/stock/${stock.id}`)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          navigate(`/stocks/${stock.id}`);
+                          navigate(`/stock/${stock.id}`);
                         }
                       }}
                       tabIndex={0}

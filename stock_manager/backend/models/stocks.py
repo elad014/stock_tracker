@@ -111,6 +111,106 @@ class StockHistoryBar(BaseModel):
     volume: Optional[int] = None
 
 
+class ArticleResponse(BaseModel):
+    article_id: str = Field(..., description="Internal article UUID")
+    url: str = Field(..., description="Original article URL")
+    title: str
+    source: Optional[str] = None
+    published_at: Optional[datetime] = None
+    provider: Optional[str] = Field(None, description="News provider, e.g. finnhub")
+    provider_summary: Optional[str] = Field(
+        None,
+        description="Short blurb supplied by the news provider",
+    )
+    ai_summary: Optional[str] = Field(
+        None,
+        description="Cached LLM summary, shared by every user",
+    )
+    ai_summary_status: str = Field(
+        ...,
+        description="none | pending | ready | failed",
+        examples=["ready"],
+    )
+    ai_summary_model: Optional[str] = None
+    ai_summary_error: Optional[str] = None
+    ai_summary_updated_at: Optional[datetime] = None
+
+
+class ArticleInput(BaseModel):
+    url: str = Field(..., description="Original article URL (dedupe key)", min_length=1)
+    title: str = Field(..., min_length=1)
+    source: Optional[str] = None
+    published_at: Optional[datetime] = None
+    provider: str = Field("finnhub", description="News provider name")
+    provider_article_id: Optional[str] = None
+    provider_summary: Optional[str] = None
+
+
+class UpsertArticlesRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "articles": [
+                        {
+                            "url": "https://example.com/aapl-earnings",
+                            "title": "Apple beats earnings expectations",
+                            "source": "Reuters",
+                            "published_at": "2026-08-09T14:30:00Z",
+                            "provider": "finnhub",
+                            "provider_summary": "Apple reported record revenue...",
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+    articles: list[ArticleInput] = Field(
+        ...,
+        description="Articles to upsert and link to this stock",
+    )
+
+
+class ClaimSummaryResponse(BaseModel):
+    claimed: bool = Field(
+        ...,
+        description="True when this caller owns the summarization work",
+    )
+    article: ArticleResponse
+
+
+class UpdateArticleSummaryRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "ai_summary": "Apple beat expectations on iPhone demand. Outlook: UP",
+                    "ai_summary_status": "ready",
+                    "ai_summary_model": "gemini/gemini-2.5-flash",
+                }
+            ]
+        }
+    )
+
+    ai_summary: Optional[str] = Field(None, description="Generated summary text")
+    ai_summary_status: str = Field(
+        ...,
+        description="none | pending | ready | failed",
+    )
+    ai_summary_model: Optional[str] = None
+    ai_summary_error: Optional[str] = None
+
+    @field_validator("ai_summary_status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        allowed = {"none", "pending", "ready", "failed"}
+        status_value = value.strip().lower()
+        if status_value not in allowed:
+            raise ValueError(f"ai_summary_status must be one of {sorted(allowed)}")
+        return status_value
+
+
 class MessageResponse(BaseModel):
     message: str
 

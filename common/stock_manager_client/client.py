@@ -105,6 +105,92 @@ class StockManagerClient:
             self._raise_from_response(response)
         return response.json()
 
+    async def list_stock_articles(
+        self,
+        stock_id: str,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/{stock_id}/articles",
+                headers=self._headers(),
+                params={"limit": limit},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def upsert_stock_articles(
+        self,
+        stock_id: str,
+        articles: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.put(
+                f"{self._base_url}/stocks/{stock_id}/articles",
+                headers=self._headers(),
+                json={"articles": articles},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def get_article(self, article_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/articles/{article_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def claim_article_summary(self, article_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base_url}/articles/{article_id}/summary/claim",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def update_article_summary(
+        self,
+        article_id: str,
+        ai_summary: Optional[str],
+        ai_summary_status: str,
+        *,
+        ai_summary_model: Optional[str] = None,
+        ai_summary_error: Optional[str] = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "ai_summary": ai_summary,
+            "ai_summary_status": ai_summary_status,
+            "ai_summary_model": ai_summary_model,
+            "ai_summary_error": ai_summary_error,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(
+                f"{self._base_url}/articles/{article_id}/summary",
+                headers=self._headers(),
+                json=body,
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def cleanup_old_articles(self, days: int = 7) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self._base_url}/articles/cleanup",
+                headers=self._headers(),
+                params={"days": days},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
     async def get_stock_by_symbol(self, symbol: str) -> Optional[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(

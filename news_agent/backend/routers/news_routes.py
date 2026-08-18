@@ -1,3 +1,6 @@
+from datetime import date
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Path, Query
 
 from deps import verify_internal_api_key
@@ -17,10 +20,10 @@ router = APIRouter(
 @router.get(
     "/news/{symbol}",
     tags=["News"],
-    summary="Get news for a specific stock",
+    summary="Get news for a specific stock on one calendar day",
     description=(
-        "Fetches recent company news for one stock from Finnhub "
-        "(`/company-news`). Read-only: does not call llm-service or update the DB."
+        "Fetches Finnhub `/company-news` for one stock and one day "
+        "(default: today). Read-only: does not call llm-service or update the DB."
     ),
     response_model=StockNewsResponse,
     responses={
@@ -30,11 +33,15 @@ router = APIRouter(
 )
 async def get_news_for_stock(
     symbol: str = Path(..., description="Stock ticker symbol", examples=["AAPL"]),
+    day: Optional[date] = Query(
+        None,
+        description="Calendar day to fetch (YYYY-MM-DD). Defaults to today.",
+    ),
     outputsize: int = Query(
-        5,
+        50,
         ge=1,
-        le=50,
-        description="Max number of articles to return",
+        le=200,
+        description="Optional cap on how many articles to return",
     ),
 ) -> StockNewsResponse:
-    return await news_service.get_stock_news(symbol, outputsize)
+    return await news_service.get_stock_news(symbol, outputsize, day=day)

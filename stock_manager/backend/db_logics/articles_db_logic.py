@@ -1,0 +1,266 @@
+import hashlib
+from datetime import datetime
+from typing import Any, Optional
+from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
+
+import asyncpg
+
+from database_client import db
+
+ARTICLES_TABLE = "news_articles"
+STOCK_ARTICLES_TABLE = "stock_articles"
+
+SUMMARY_STATUS_NONE = "none"
+SUMMARY_STATUS_PENDING = "pending"
+SUMMARY_STATUS_READY = "ready"
+SUMMARY_STATUS_FAILED = "failed"
+
+# A claim older than this is treated as abandoned (crashed worker / redeploy).
+_STALE_CLAIM_MINUTES = 3
+
+_ARTICLE_COLUMNS = (
+    "article_id, url_hash, url, title, source, published_at, "
+    "provider, provider_article_id, provider_summary, "
+    "ai_summary, ai_summary_status, ai_summary_model, ai_summary_error, "
+    "ai_summary_started_at, ai_summary_updated_at, created_at"
+)
+_ARTICLE_COLUMNS_A = ", ".join(
+    f"a.{column.strip()}" for column in _ARTICLE_COLUMNS.split(",")
+)
+
+
+def normalize_url(url: str) -> str:
+    """Drop the fragment and trailing slash so the same article hashes once."""
+    parts = urlsplit(url.strip())
+    path = parts.path.rstrip("/") or "/"
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+
+
+def hash_url(url: str) -> str:
+    return hashlib.sha256(normalize_url(url).encode("utf-8")).hexdigest()
+
+
+def _normalize_datetime(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _normalize_article(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "article_id": str(row["article_id"]),
+        "url": row["url"],
+        "title": row["title"],
+        "source": row.get("source"),
+        "published_at": _normalize_datetime(row.get("published_at")),
+        "provider": row.get("provider"),
+        "provider_summary": row.get("provider_summary"),
+        "ai_summary": row.get("ai_summary"),
+        "ai_summary_status": row.get("ai_summary_status") or SUMMARY_STATUS_NONE,
+        "ai_summary_model": row.get("ai_summary_model"),
+        "ai_summary_error": row.get("ai_summary_error"),
+        "ai_summary_updated_at": _normalize_datetime(row.get("ai_summary_updated_at")),
+    }
+
+
+async def upsert_article(
+    url: str,
+    title: str,
+    source: Optional[str] = None,
+    published_at: Optional[datetime] = None,
+    provider: str = "finnhub",
+    provider_article_id: Optional[str] = None,
+    provider_summary: Optional[str] = None,
+    conn: Optional[asyncpg.Connection] = None,
+) -> dict[str, Any]:
+    """Insert or refresh an article by URL. Never touches cached AI summary fields."""
+    row = await db.fetch_one(
+        f"""
+        INSERT INTO {ARTICLES_TABLE} (
+            article_id, url_hash, url, title, source, published_at,
+            provider, provider_article_id, provider_summary
+        )
+        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (url_hash) DO UPDATE SET
+            title = EXCLUDED.title,
+            source = COALESCE(EXCLUDED.source, {ARTICLES_TABLE}.source),
+            published_at = COALESCE(
+                EXCLUDED.published_at, {ARTICLES_TABLE}.published_at
+            ),
+            provider_article_id = COALESCE(
+                EXCLUDED.provider_article_id, {ARTICLES_TABLE}.provider_article_id
+            ),
+            provider_summary = COALESCE(
+                EXCLUDED.provider_summary, {ARTICLES_TABLE}.provider_summary
+            )
+        RETURNING {_ARTICLE_COLUMNS}
+        """,
+        str(uuid4()),
+        hash_url(url),
+        url,
+        title,
+        source,
+        published_at,
+        provider,
+        provider_article_id,
+        provider_summary,
+        conn=conn,
+    )
+    assert row is not None
+    return _normalize_article(row)
+
+
+async def link_article_to_stock(
+    stock_id: str,
+    article_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> None:
+    await db.execute(
+        f"""
+        INSERT INTO {STOCK_ARTICLES_TABLE} (stock_id, article_id)
+        VALUES ($1::uuid, $2::uuid)
+        ON CONFLICT (stock_id, article_id) DO NOTHING
+        """,
+        stock_id,
+        article_id,
+        conn=conn,
+    )
+
+
+async def list_by_stock(
+    stock_id: str,
+    limit: int = 10,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    rows = await db.fetch_all(
+        f"""
+        SELECT {_ARTICLE_COLUMNS_A}
+        FROM {ARTICLES_TABLE} a
+        INNER JOIN {STOCK_ARTICLES_TABLE} sa ON sa.article_id = a.article_id
+        WHERE sa.stock_id = $1::uuid
+        ORDER BY a.published_at DESC NULLS LAST, a.created_at DESC
+        LIMIT $2
+        """,
+        stock_id,
+        limit,
+        conn=conn,
+    )
+    return [_normalize_article(row) for row in rows]
+
+
+async def get_by_id(
+    article_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    row = await db.fetch_one(
+        f"""
+        SELECT {_ARTICLE_COLUMNS}
+        FROM {ARTICLES_TABLE}
+        WHERE article_id = $1::uuid
+        """,
+        article_id,
+        conn=conn,
+    )
+    return _normalize_article(row) if row else None
+
+
+async def claim_for_summary(
+    article_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    """Atomically take ownership of summarizing this article.
+
+    Exactly one concurrent caller gets a row back; everyone else gets None and
+    should read the current state instead of doing duplicate LLM work.
+    """
+    row = await db.fetch_one(
+        f"""
+        UPDATE {ARTICLES_TABLE}
+        SET ai_summary_status = '{SUMMARY_STATUS_PENDING}',
+            ai_summary_started_at = NOW()
+        WHERE article_id = $1::uuid
+          AND (
+            ai_summary_status IN ('{SUMMARY_STATUS_NONE}', '{SUMMARY_STATUS_FAILED}')
+            OR (
+                ai_summary_status = '{SUMMARY_STATUS_PENDING}'
+                AND ai_summary_started_at
+                    < NOW() - INTERVAL '{_STALE_CLAIM_MINUTES} minutes'
+            )
+          )
+        RETURNING {_ARTICLE_COLUMNS}
+        """,
+        article_id,
+        conn=conn,
+    )
+    return _normalize_article(row) if row else None
+
+
+async def set_summary(
+    article_id: str,
+    ai_summary: Optional[str],
+    ai_summary_status: str,
+    ai_summary_model: Optional[str] = None,
+    ai_summary_error: Optional[str] = None,
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    row = await db.fetch_one(
+        f"""
+        UPDATE {ARTICLES_TABLE}
+        SET ai_summary = $2,
+            ai_summary_status = $3,
+            ai_summary_model = $4,
+            ai_summary_error = $5,
+            ai_summary_updated_at = NOW()
+        WHERE article_id = $1::uuid
+        RETURNING {_ARTICLE_COLUMNS}
+        """,
+        article_id,
+        ai_summary,
+        ai_summary_status,
+        ai_summary_model,
+        ai_summary_error,
+        conn=conn,
+    )
+    return _normalize_article(row) if row else None
+
+
+async def delete_older_than(
+    days: int = 7,
+    conn: Optional[asyncpg.Connection] = None,
+) -> str:
+    """Delete articles outside the retention window (AI summaries go with the row).
+
+    Keeps the last ``days`` calendar days inclusive. Example with days=7 on Aug 9:
+    keeps Aug 3..Aug 9 and deletes anything older.
+    """
+    window = max(1, int(days))
+    return await db.execute(
+        f"""
+        DELETE FROM {ARTICLES_TABLE}
+        WHERE COALESCE(published_at, created_at)::date
+              < (CURRENT_DATE - ($1::int - 1))
+        """,
+        window,
+        conn=conn,
+    )
+
+
+async def delete_orphans_older_than(
+    days: int = 7,
+    conn: Optional[asyncpg.Connection] = None,
+) -> str:
+    """Remove articles no stock links to anymore."""
+    return await db.execute(
+        f"""
+        DELETE FROM {ARTICLES_TABLE} a
+        WHERE NOT EXISTS (
+            SELECT 1 FROM {STOCK_ARTICLES_TABLE} sa WHERE sa.article_id = a.article_id
+        )
+        AND a.created_at < NOW() - ($1::int * INTERVAL '1 day')
+        """,
+        days,
+        conn=conn,
+    )
