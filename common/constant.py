@@ -37,6 +37,31 @@ ARTICLE_EXTRACT_MAX_CHARS = 12_000
 ARTICLE_RETENTION_DAYS = 7
 
 # ---------------------------------------------------------------------------
+# Object storage (Supabase Storage over the S3 protocol, or AWS S3)
+#
+# Supabase only accepts SigV4 with path-style addressing; any other combination
+# fails with SignatureDoesNotMatch. Both values are also valid for AWS S3, so
+# the same client works against either backend.
+# ---------------------------------------------------------------------------
+S3_SIGNATURE_VERSION = "s3v4"
+S3_ADDRESSING_STYLE = "path"
+S3_DEFAULT_REGION = "us-east-1"
+S3_DEFAULT_CONTENT_TYPE = "application/octet-stream"
+S3_CONNECT_TIMEOUT_SECONDS = 10
+S3_READ_TIMEOUT_SECONDS = 60
+S3_MAX_ATTEMPTS = 3
+S3_PRESIGNED_EXPIRE_SECONDS = 3600
+S3_MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024
+S3_MULTIPART_CHUNK_BYTES = 8 * 1024 * 1024
+S3_DELETE_BATCH_SIZE = 1000
+
+# S3 has no real folders, only key prefixes. The Supabase dashboard fakes an
+# empty folder with a 0-byte object of this name and expects clients to hide it
+# from listings. Matching the convention keeps folders created by code and by
+# the dashboard indistinguishable.
+S3_FOLDER_PLACEHOLDER = ".emptyFolderPlaceholder"
+
+# ---------------------------------------------------------------------------
 # LLM defaults (llm-service / LiteLLM)
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"
