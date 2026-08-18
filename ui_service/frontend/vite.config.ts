@@ -10,6 +10,7 @@ export default defineConfig({
       "/watchlist": "http://localhost:8000",
       "/admin": "http://localhost:8000",
       "/stocks": "http://localhost:8000",
+      "/documents": "http://localhost:8000",
     },
   },
 });

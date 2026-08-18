@@ -36,12 +36,13 @@ from constant import (
     S3_ADDRESSING_STYLE,
     S3_CONNECT_TIMEOUT_SECONDS,
     S3_DEFAULT_REGION,
-    S3_DELETE_BATCH_SIZE,
     S3_MAX_ATTEMPTS,
     S3_MULTIPART_CHUNK_BYTES,
     S3_MULTIPART_THRESHOLD_BYTES,
     S3_PRESIGNED_EXPIRE_SECONDS,
     S3_READ_TIMEOUT_SECONDS,
+    S3_REQUEST_CHECKSUM,
+    S3_RESPONSE_CHECKSUM,
     S3_SIGNATURE_VERSION,
 )
 from object_storage_client.util import (
@@ -127,6 +128,8 @@ class ObjectStorageClient:
             connect_timeout=S3_CONNECT_TIMEOUT_SECONDS,
             read_timeout=S3_READ_TIMEOUT_SECONDS,
             retries={"max_attempts": S3_MAX_ATTEMPTS, "mode": "standard"},
+            request_checksum_calculation=S3_REQUEST_CHECKSUM,
+            response_checksum_validation=S3_RESPONSE_CHECKSUM,
         )
         return boto3.client(
             "s3",
@@ -276,22 +279,18 @@ class ObjectStorageClient:
         return sorted(folders)
 
     def _delete_keys(self, keys: list[str], bucket: str) -> int:
+        # DeleteObject, not DeleteObjects. boto3 marks the batch API as
+        # checksum-required, and Supabase Storage rejects those headers with
+        # an empty error: "An error occurred () when calling the DeleteObjects
+        # operation". Single-key delete has no checksum requirement.
         client = self._s3()
         deleted = 0
-        for start in range(0, len(keys), S3_DELETE_BATCH_SIZE):
-            batch = keys[start : start + S3_DELETE_BATCH_SIZE]
-            response = client.delete_objects(
-                Bucket=bucket,
-                Delete={"Objects": [{"Key": key} for key in batch], "Quiet": True},
-            )
-            for error in response.get("Errors", []):
-                logger.error(
-                    "Failed to delete %s: %s %s",
-                    error.get("Key"),
-                    error.get("Code"),
-                    error.get("Message"),
-                )
-            deleted += len(batch) - len(response.get("Errors", []))
+        for key in keys:
+            try:
+                client.delete_object(Bucket=bucket, Key=key)
+                deleted += 1
+            except ClientError as exc:
+                logger.error("Failed to delete %s: %s", key, exc)
         return deleted
 
     def _delete_prefix(self, prefix: str, bucket: str) -> int:
@@ -536,6 +535,32 @@ class ObjectStorageClient:
         except (ClientError, BotoCoreError) as exc:
             raise self._fail("list_buckets", "<account>", exc) from exc
         return [str(entry["Name"]) for entry in response.get("Buckets", [])]
+
+    async def copy(
+        self,
+        source_key: str,
+        dest_key: str,
+        *,
+        bucket: Optional[str] = None,
+    ) -> StoredObject:
+        """Copy one object inside the same bucket."""
+        source = normalize_key(source_key)
+        dest = normalize_key(dest_key)
+        resolved = self._resolve_bucket(bucket)
+        try:
+            await asyncio.to_thread(
+                lambda: self._s3().copy_object(
+                    Bucket=resolved,
+                    CopySource={"Bucket": resolved, "Key": source},
+                    Key=dest,
+                )
+            )
+            head = await asyncio.to_thread(self._head, dest, resolved)
+        except (ClientError, BotoCoreError) as exc:
+            raise self._fail("copy", f"{source} -> {dest}", exc) from exc
+        if head is None:
+            raise ObjectStorageError(f"Copied object is missing: {dest}")
+        return to_stored_object(dest, head)
 
     async def delete(self, key: str, *, bucket: Optional[str] = None) -> None:
         """Delete one object. Supabase has no versioning, so this is permanent."""
