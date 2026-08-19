@@ -76,6 +76,7 @@ async def upsert_article(
     provider: str = "finnhub",
     provider_article_id: Optional[str] = None,
     provider_summary: Optional[str] = None,
+    text: Optional[str] = None,
     conn: Optional[asyncpg.Connection] = None,
 ) -> dict[str, Any]:
     """Insert or refresh an article by URL. Never overwrites a stored full text body."""
@@ -85,7 +86,7 @@ async def upsert_article(
             article_id, url_hash, url, title, source, published_at,
             provider, provider_article_id, provider_summary, text
         )
-        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (url_hash) DO UPDATE SET
             title = EXCLUDED.title,
             source = COALESCE(EXCLUDED.source, {ARTICLES_TABLE}.source),
@@ -98,7 +99,7 @@ async def upsert_article(
             provider_summary = COALESCE(
                 EXCLUDED.provider_summary, {ARTICLES_TABLE}.provider_summary
             ),
-            text = COALESCE({ARTICLES_TABLE}.text, EXCLUDED.provider_summary)
+            text = COALESCE({ARTICLES_TABLE}.text, EXCLUDED.text)
         RETURNING {_ARTICLE_COLUMNS}
         """,
         str(uuid4()),
@@ -110,6 +111,7 @@ async def upsert_article(
         provider,
         provider_article_id,
         provider_summary,
+        text,
         conn=conn,
     )
     assert row is not None
@@ -201,6 +203,26 @@ async def claim_for_summary(
     return _normalize_article(row) if row else None
 
 
+async def set_article_text(
+    article_id: str,
+    text: Optional[str],
+    conn: Optional[asyncpg.Connection] = None,
+) -> Optional[dict[str, Any]]:
+    """Overwrite ``text`` only. Pass None to clear a placeholder (e.g. title)."""
+    row = await db.fetch_one(
+        f"""
+        UPDATE {ARTICLES_TABLE}
+        SET text = $2
+        WHERE article_id = $1::uuid
+        RETURNING {_ARTICLE_COLUMNS}
+        """,
+        article_id,
+        text,
+        conn=conn,
+    )
+    return _normalize_article(row) if row else None
+
+
 async def set_summary(
     article_id: str,
     ai_summary: Optional[str],
@@ -246,7 +268,7 @@ async def list_recent_texts_by_symbol(
         JOIN {STOCK_ARTICLES_TABLE} sa ON na.article_id = sa.article_id
         JOIN {QUOTES_TABLE} sq ON sa.stock_id = sq.stock_id
         WHERE UPPER(sq.symbol) = UPPER($1)
-          AND na.published_at >= NOW() - ($2::int * INTERVAL '1 day')
+          AND na.published_at >= NOW() - make_interval(days => $2::int)
           AND na.text IS NOT NULL
           AND BTRIM(na.text) <> ''
         ORDER BY na.published_at DESC NULLS LAST

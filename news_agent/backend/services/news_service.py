@@ -125,11 +125,13 @@ async def search_and_summarize(symbol: str, query: str) -> SearchAndSummarizeRes
         f"News articles:\n{corpus}"
     )
     try:
-        result = await _llm_client().chat_completion(
+        llm = _llm_client()
+        result = await llm.chat_completion(
             [
                 {"role": "system", "content": NEWS_SEARCH_SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
-            ]
+            ],
+            max_tokens=llm._default_max_tokens(),
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
