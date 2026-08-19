@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from constant import ARTICLE_RETENTION_DAYS
-from llm_service_client import LLMServiceClient
+from llm_provider_client import LLMProviderClient
 from news_provider_client import NewsItem, NewsProviderClient
 from services.article_service import to_article_payload
 from stock_manager_client import StockManagerClient
@@ -16,8 +16,8 @@ def _news_provider() -> NewsProviderClient:
     return NewsProviderClient()
 
 
-def _llm_client() -> LLMServiceClient:
-    return LLMServiceClient()
+def _llm_client() -> LLMProviderClient:
+    return LLMProviderClient()
 
 
 def _stock_manager_client() -> StockManagerClient:
@@ -110,7 +110,7 @@ async def run_news_update() -> None:
                 change=_to_float(stock.get("change")),
                 percent_change=_to_float(stock.get("percent_change")),
             )
-            content = str(summary_result.get("content") or "").strip()
+            content = summary_result.content.strip()
             if not content:
                 logger.warning("Empty LLM summary for %s; skipping update", symbol)
                 continue

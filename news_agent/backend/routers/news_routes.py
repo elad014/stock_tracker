@@ -23,7 +23,7 @@ router = APIRouter(
     summary="Get news for a specific stock on one calendar day",
     description=(
         "Fetches Finnhub `/company-news` for one stock and one day "
-        "(default: today). Read-only: does not call llm-service or update the DB."
+        "(default: today). Read-only: does not call the LLM or update the DB."
     ),
     response_model=StockNewsResponse,
     responses={

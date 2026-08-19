@@ -25,7 +25,8 @@ scheduler = AsyncIOScheduler()
 API_DESCRIPTION = """
 Internal News Agent for stock_tracker.
 
-Orchestrates the news summary pipeline only — no direct DB or LiteLLM access.
+Orchestrates the news summary pipeline — no direct DB access. Summaries go
+through ``llm_provider_client`` (LiteLLM), not llm-service.
 
 ## Auth
 News and agent endpoints require header:
@@ -34,7 +35,7 @@ News and agent endpoints require header:
 
 ## Swagger abilities
 1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
-2. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via llm-service -> update DB
+2. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via LiteLLM -> update DB
 3. **Articles** — `POST /stocks/{stock_id}/articles/sync` to store a stock's articles, and
    `POST /articles/{article_id}/summarize` to summarize one article once for all users
 

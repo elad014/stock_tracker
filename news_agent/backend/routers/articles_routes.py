@@ -45,7 +45,7 @@ async def sync_stock_articles(
     description=(
         "Claims the article through stock-manager. The winning caller extracts the "
         "article text from its URL (falling back to the provider blurb), sends it to "
-        "llm-service, and stores the result. Concurrent callers get status=pending "
+        "LiteLLM, and stores the result. Concurrent callers get status=pending "
         "and should poll until status=ready. A cached summary returns immediately."
     ),
     response_model=ArticleSummaryResponse,

@@ -7,6 +7,7 @@ ENV PYTHONPATH=/app/common:/app/backend
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade litellm
 
 COPY news_agent/backend/ ./backend/
 COPY common/ ./common/

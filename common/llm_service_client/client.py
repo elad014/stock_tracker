@@ -68,40 +68,5 @@ class LLMServiceClient:
             self._raise_from_response(response)
         return response.json()
 
-    async def summarize(
-        self,
-        text: str,
-        *,
-        symbol: Optional[str] = None,
-        close: Optional[float] = None,
-        change: Optional[float] = None,
-        percent_change: Optional[float] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> dict[str, Any]:
-        body: dict[str, Any] = {"text": text}
-        if symbol is not None:
-            body["symbol"] = symbol
-        if close is not None:
-            body["close"] = close
-        if change is not None:
-            body["change"] = change
-        if percent_change is not None:
-            body["percent_change"] = percent_change
-        if temperature is not None:
-            body["temperature"] = temperature
-        if max_tokens is not None:
-            body["max_tokens"] = max_tokens
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{self._base_url}/summarize",
-                headers=self._headers(),
-                json=body,
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
-
 
 llm_service_client = LLMServiceClient()
