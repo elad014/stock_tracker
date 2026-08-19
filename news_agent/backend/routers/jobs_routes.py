@@ -22,7 +22,7 @@ router = APIRouter(
         "1. List stocks from stock-manager\n"
         "2. Fetch **all** Finnhub articles published **today** for that stock\n"
         "3. Upsert those articles (keep last 7 days in DB)\n"
-        "4. Rebuild `stock_summery` from today's articles only via llm-service\n"
+        "4. Rebuild `stock_summery` from today's articles only via LiteLLM\n"
         "5. Delete articles older than 7 days (AI summaries deleted with them)\n\n"
         "Stocks with no news today are skipped. Failures on one stock do not stop the rest."
     ),

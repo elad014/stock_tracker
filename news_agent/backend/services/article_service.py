@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 
 from article_extractor_client import ArticleExtractorClient
-from llm_service_client import LLMServiceClient
+from llm_provider_client import LLMProviderClient
 from models.articles import ArticleSummaryResponse, ArticleSyncResponse
 from news_provider_client import NewsItem, NewsProviderClient
 from stock_manager_client import StockManagerClient
@@ -25,8 +25,8 @@ def _news_provider() -> NewsProviderClient:
     return NewsProviderClient()
 
 
-def _llm_client() -> LLMServiceClient:
-    return LLMServiceClient()
+def _llm_client() -> LLMProviderClient:
+    return LLMProviderClient()
 
 
 def _extractor() -> ArticleExtractorClient:
@@ -137,7 +137,7 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
             raise RuntimeError("No article text available to summarize")
 
         result = await _llm_client().summarize(text, symbol=None)
-        content = str(result.get("content") or "").strip()
+        content = result.content.strip()
         if not content:
             raise RuntimeError("LLM returned an empty summary")
 
@@ -145,7 +145,7 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
             article_id,
             ai_summary=content,
             ai_summary_status=STATUS_READY,
-            ai_summary_model=str(result.get("model") or "") or None,
+            ai_summary_model=result.model or None,
         )
         logger.info(
             "Summarized article %s (extracted=%s)",

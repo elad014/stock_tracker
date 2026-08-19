@@ -12,11 +12,9 @@ services:
     environment:
       - PYTHONPATH=/app/common:/app/backend
       - STOCK_MANAGER_URL=http://stock-manager:8001
-      - LLM_SERVICE_URL=http://llm-service:8002
       - NEWS_AGENT_URL=http://news-agent:8003
     depends_on:
       - stock-manager
-      - llm-service
       - news-agent
     restart: unless-stopped
 
@@ -61,8 +59,6 @@ services:
     environment:
       - PYTHONPATH=/app/common:/app/backend
       - STOCK_MANAGER_URL=http://stock-manager:8001
-      - LLM_SERVICE_URL=http://llm-service:8002
     depends_on:
       - stock-manager
-      - llm-service
     restart: unless-stopped

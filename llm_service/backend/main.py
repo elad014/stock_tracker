@@ -4,20 +4,19 @@ from models.llm import HealthResponse
 from routers.llm_routes import router as llm_router
 
 API_DESCRIPTION = """
-Internal LLM gateway for stock_tracker.
+Internal LLM gateway for stock_tracker chat.
 
-This is the **only** service allowed to talk to LLM vendors via LiteLLM
-(`common/llm_provider_client`). Other services must call this gateway over HTTP.
+News summaries are owned by news-agent via ``llm_provider_client``.
+This service keeps stateful chat for the UI.
 
 ## Auth
-All chat/summarize endpoints require header:
+Chat endpoints require header:
 
 `X-Internal-Api-Key: <INTERNAL_API_KEY>`
 
 ## Endpoints
 - `POST /chat` — stateful UI chat (last 20 messages per `user_id`)
 - `DELETE /chat/{user_id}` — clear chat history
-- `POST /summarize` — stateless news/text summary
 
 ## Configuration
 - `LLM_MODEL` — default LiteLLM model id
@@ -39,10 +38,6 @@ app = FastAPI(
         {
             "name": "Chat",
             "description": "Stateful chat with per-user in-memory history.",
-        },
-        {
-            "name": "Summarize",
-            "description": "Stateless text/news summarization for the news pipeline.",
         },
         {
             "name": "Health",

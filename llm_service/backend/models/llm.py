@@ -39,49 +39,6 @@ class ChatResponse(BaseModel):
     usage: Optional[ChatUsage] = None
 
 
-class SummarizeRequest(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "text": "Apple reported record iPhone sales this quarter...",
-                    "symbol": "AAPL",
-                    "close": 198.5,
-                    "change": 2.1,
-                    "percent_change": 1.07,
-                }
-            ]
-        }
-    )
-
-    text: str = Field(..., description="News article or text to summarize", min_length=1)
-    symbol: Optional[str] = Field(
-        None,
-        description="Optional ticker symbol for context in the summary prompt",
-    )
-    close: Optional[float] = Field(
-        None,
-        description="Latest close price for quote-aware outlook",
-    )
-    change: Optional[float] = Field(
-        None,
-        description="Absolute price change for quote-aware outlook",
-    )
-    percent_change: Optional[float] = Field(
-        None,
-        description="Percent price change for quote-aware outlook",
-    )
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    max_tokens: Optional[int] = Field(None, gt=0)
-
-
-class SummarizeResponse(BaseModel):
-    content: str
-    model: str
-    symbol: Optional[str] = None
-    usage: Optional[ChatUsage] = None
-
-
 class SessionClearResponse(BaseModel):
     user_id: str
     message: str

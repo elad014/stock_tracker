@@ -5,8 +5,6 @@ from models.llm import (
     ChatRequest,
     ChatResponse,
     SessionClearResponse,
-    SummarizeRequest,
-    SummarizeResponse,
 )
 import services.llm_service as llm_service
 
@@ -44,13 +42,3 @@ async def clear_user_chat(
         user_id=user_id,
         message="Conversation history cleared",
     )
-
-
-@router.post(
-    "/summarize",
-    tags=["Summarize"],
-    summary="Stateless news/text summarization",
-    response_model=SummarizeResponse,
-)
-async def summarize_text(request: SummarizeRequest) -> SummarizeResponse:
-    return await llm_service.summarize(request)
