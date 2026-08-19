@@ -11,3 +11,4 @@ requests
 apscheduler
 litellm
 trafilatura
+boto3
