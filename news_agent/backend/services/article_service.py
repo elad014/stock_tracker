@@ -171,7 +171,6 @@ async def upsert_stock_articles(
             source=item.get("source"),
             published_at=_parse_published_at(item.get("published_at")),
             provider=str(item.get("provider") or "finnhub"),
-            provider_article_id=item.get("provider_article_id"),
             provider_summary=item.get("provider_summary"),
         )
         await articles_db.link_article_to_stock(stock_id, article["article_id"])
