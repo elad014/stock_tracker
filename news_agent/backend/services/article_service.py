@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from fastapi import HTTPException, status
 
-from article_extractor_client import ArticleExtractorClient
+from article_extractor import ArticleExtractor
 from db_logics import articles_db_logic as articles_db
 from llm_provider_client import LLMProviderClient
 from models.articles import ArticleRecord, ArticleSummaryResponse, ArticleSyncResponse
@@ -32,8 +32,8 @@ def _llm_client() -> LLMProviderClient:
     return LLMProviderClient()
 
 
-def _extractor() -> ArticleExtractorClient:
-    return ArticleExtractorClient()
+def _extractor() -> ArticleExtractor:
+    return ArticleExtractor()
 
 
 async def _run_blocking(func: Any, *args: Any, **kwargs: Any) -> Any:

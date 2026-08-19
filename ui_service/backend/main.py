@@ -3,14 +3,14 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
-
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.responses import Response
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
 
 from database_client import db
 from object_storage_client import ObjectStorageError

@@ -11,7 +11,7 @@ from typing import Optional
 import requests
 import trafilatura
 
-from article_extractor_client.util import clean_text, truncate
+from article_extractor.util import clean_text, truncate
 from constant import (
     ARTICLE_EXTRACT_MAX_BYTES,
     ARTICLE_EXTRACT_MAX_CHARS,
@@ -22,7 +22,7 @@ from constant import (
 logger = logging.getLogger(__name__)
 
 
-class ArticleExtractorClient:
+class ArticleExtractor:
     """Downloads an article page and extracts its main text."""
 
     def __init__(
