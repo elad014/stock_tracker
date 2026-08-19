@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 STATUS_READY = "ready"
 STATUS_PENDING = "pending"
 STATUS_FAILED = "failed"
+_EXTRACT_CONCURRENCY = 5
 
 
 def _stock_manager_client() -> StockManagerClient:
@@ -106,12 +107,59 @@ def _to_record(article: dict[str, Any]) -> ArticleRecord:
     )
 
 
+def _placeholder_body(article: dict[str, Any]) -> Optional[str]:
+    """Return Finnhub blurb, or None. Never use the headline as article body."""
+    blurb = str(article.get("provider_summary") or "").strip()
+    return blurb or None
+
+
+def _is_placeholder_text(article: dict[str, Any]) -> bool:
+    """True when ``text`` is empty, the title, or title+blurb — not a full article."""
+    text = str(article.get("text") or "").strip()
+    if not text:
+        return True
+    title = str(article.get("title") or "").strip()
+    blurb = str(article.get("provider_summary") or "").strip()
+    if title and text == title:
+        return True
+    if title and blurb and text == f"{title}\n\n{blurb}":
+        return True
+    if blurb and text == blurb:
+        return True
+    return False
+
+
+async def _ensure_article_body(article: dict[str, Any]) -> dict[str, Any]:
+    """Download the page and store readable body in ``text`` when missing."""
+    if not _is_placeholder_text(article):
+        return article
+
+    url = str(article.get("url") or "").strip()
+    extracted = await _run_blocking(_extractor().extract, url) if url else None
+    if extracted:
+        updated = await articles_db.set_article_text(article["article_id"], extracted)
+        return updated or article
+
+    current = str(article.get("text") or "").strip()
+    title = str(article.get("title") or "").strip()
+    blurb = str(article.get("provider_summary") or "").strip()
+    if (not current) or (title and current == title) or (
+        title and blurb and current == f"{title}\n\n{blurb}"
+    ):
+        repaired = await articles_db.set_article_text(
+            article["article_id"],
+            _placeholder_body(article),
+        )
+        return repaired or article
+    return article
+
+
 async def upsert_stock_articles(
     stock_id: str,
     articles: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Insert/update news_articles and link them via stock_articles."""
-    stored: list[dict[str, Any]] = []
+    """Insert/update news_articles, link them, and fill ``text`` from the URL."""
+    pending: list[dict[str, Any]] = []
     for item in articles:
         url = str(item.get("url") or "").strip()
         title = str(item.get("title") or "").strip()
@@ -127,8 +175,18 @@ async def upsert_stock_articles(
             provider_summary=item.get("provider_summary"),
         )
         await articles_db.link_article_to_stock(stock_id, article["article_id"])
-        stored.append(article)
-    return stored
+        pending.append(article)
+
+    if not pending:
+        return []
+
+    semaphore = asyncio.Semaphore(_EXTRACT_CONCURRENCY)
+
+    async def fill(article: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            return await _ensure_article_body(article)
+
+    return list(await asyncio.gather(*[fill(article) for article in pending]))
 
 
 async def list_stock_articles(stock_id: str, limit: int = 100) -> list[ArticleRecord]:
@@ -176,10 +234,14 @@ async def sync_stock_articles(
 
 
 def _summary_source(article: dict[str, Any], extracted_text: Optional[str]) -> str:
+    """LLM input only. Does not decide what is stored in ``text``."""
     if extracted_text:
         return extracted_text
-    provider_summary = str(article.get("provider_summary") or "").strip()
+    existing = str(article.get("text") or "").strip()
     title = str(article.get("title") or "").strip()
+    if existing and existing != title:
+        return existing
+    provider_summary = str(article.get("provider_summary") or "").strip()
     if provider_summary:
         return f"{title}\n\n{provider_summary}" if title else provider_summary
     return title
@@ -202,6 +264,13 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
     try:
         extractor = _extractor()
         extracted_text = await _run_blocking(extractor.extract, claimed["url"])
+        if extracted_text:
+            await articles_db.set_article_text(article_id, extracted_text)
+        elif _is_placeholder_text(claimed):
+            await articles_db.set_article_text(
+                article_id,
+                _placeholder_body(claimed),
+            )
 
         text = _summary_source(claimed, extracted_text)
         if not text.strip():
@@ -217,7 +286,7 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
             ai_summary=content,
             ai_summary_status=STATUS_READY,
             ai_summary_model=result.model or None,
-            text=text,
+            text=extracted_text,
         )
         if updated is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
