@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { fetchCurrentUser } from "../../services/authService";
@@ -7,6 +7,17 @@ import {
   fetchWatchlist,
   removeWatchlistStock,
 } from "../../services/watchlistService";
+import {
+  createDocumentFolder,
+  deleteDocumentFile,
+  deleteDocumentFolder,
+  fetchDocumentTree,
+  fetchDownloadUrl,
+  moveDocument,
+  uploadDocument,
+} from "../../services/documentService";
+import DocumentTree from "../components/DocumentTree";
+import type { DocumentTree as DocumentTreeData, TreeNode } from "../../models/documents";
 import type { WatchlistStock } from "../../models/watchlist";
 import {
   changeClassName,
@@ -26,6 +37,22 @@ type ChatMessage = {
   text: string;
 };
 
+function collectFolders(nodes: TreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.type === "folder") {
+      paths.push(node.path);
+      paths.push(...collectFolders(node.children));
+    }
+  }
+  return paths;
+}
+
+function parentFolder(path: string): string {
+  const slash: number = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+}
+
 export default function DashboardPage(): JSX.Element {
   const navigate = useNavigate();
   const [stocks, setStocks] = useState<WatchlistStock[]>([]);
@@ -44,6 +71,13 @@ export default function DashboardPage(): JSX.Element {
       text: "Ask me about your followed stocks. LLM connection coming soon.",
     },
   ]);
+  const [docTree, setDocTree] = useState<DocumentTreeData | null>(null);
+  const [docError, setDocError] = useState<string>("");
+  const [docBusy, setDocBusy] = useState<boolean>(false);
+  const [selectedFolder, setSelectedFolder] = useState<string>("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [newFolderName, setNewFolderName] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function loadWatchlist(): Promise<void> {
     setListError("");
@@ -74,10 +108,131 @@ export default function DashboardPage(): JSX.Element {
     }
   }
 
+  async function loadDocuments(): Promise<void> {
+    setDocError("");
+    try {
+      const tree = await fetchDocumentTree();
+      setDocTree(tree);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+        return;
+      }
+      setDocError(err.response?.data?.detail ?? "Failed to load documents");
+    }
+  }
+
   useEffect(() => {
     void loadWatchlist();
     void loadUserRole();
+    void loadDocuments();
   }, []);
+
+  function handleToggleFolder(path: string): void {
+    setExpanded((prev: Record<string, boolean>) => ({
+      ...prev,
+      [path]: !prev[path],
+    }));
+  }
+
+  function handleSelectFolder(path: string): void {
+    setSelectedFolder((prev: string) => (prev === path ? "" : path));
+    setExpanded((prev: Record<string, boolean>) => ({ ...prev, [path]: true }));
+  }
+
+  async function handleUploadFile(e: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file: File | undefined = e.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setDocError("");
+    setDocBusy(true);
+    try {
+      await uploadDocument(file, selectedFolder);
+      await loadDocuments();
+    } catch (err: any) {
+      setDocError(err.response?.data?.detail ?? "Upload failed");
+    } finally {
+      setDocBusy(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function handleCreateFolder(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    const name: string = newFolderName.trim();
+    if (!name) {
+      return;
+    }
+    setDocError("");
+    setDocBusy(true);
+    try {
+      const path: string = selectedFolder ? `${selectedFolder}/${name}` : name;
+      await createDocumentFolder(path);
+      setNewFolderName("");
+      setSelectedFolder(path);
+      setExpanded((prev: Record<string, boolean>) => ({ ...prev, [path]: true }));
+      await loadDocuments();
+    } catch (err: any) {
+      setDocError(err.response?.data?.detail ?? "Could not create folder");
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function handleDeleteNode(node: TreeNode): Promise<void> {
+    const label: string = node.type === "folder" ? "folder" : "file";
+    if (!window.confirm(`Delete ${label} "${node.name}"?`)) {
+      return;
+    }
+    setDocError("");
+    setDocBusy(true);
+    try {
+      if (node.type === "folder") {
+        await deleteDocumentFolder(node.path);
+        if (selectedFolder === node.path) {
+          setSelectedFolder("");
+        }
+      } else {
+        await deleteDocumentFile(node.path);
+      }
+      await loadDocuments();
+    } catch (err: any) {
+      setDocError(err.response?.data?.detail ?? `Could not delete ${label}`);
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function handleMoveFile(node: TreeNode): Promise<void> {
+    if (parentFolder(node.path) === selectedFolder) {
+      setDocError("Choose a different folder in Put files in, then click Move.");
+      return;
+    }
+    setDocError("");
+    setDocBusy(true);
+    try {
+      await moveDocument(node.path, selectedFolder);
+      await loadDocuments();
+    } catch (err: any) {
+      setDocError(err.response?.data?.detail ?? "Could not move file");
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function handleOpenFile(node: TreeNode): Promise<void> {
+    setDocError("");
+    try {
+      const url: string = await fetchDownloadUrl(node.path);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      setDocError(err.response?.data?.detail ?? "Could not open file");
+    }
+  }
 
   function handleLogout(): void {
     localStorage.removeItem("access_token");
@@ -150,6 +305,10 @@ export default function DashboardPage(): JSX.Element {
       relatedSymbol: stock.symbol,
       headline: stock.stock_summery as string,
     }));
+  const folderPaths: string[] = docTree ? collectFolders(docTree.nodes) : [];
+  const uploadLabel: string = selectedFolder
+    ? `Upload PDF to ${selectedFolder}`
+    : "Upload PDF";
 
   return (
     <div className="dashboard-page">
@@ -179,6 +338,96 @@ export default function DashboardPage(): JSX.Element {
       </header>
 
       <main className="dashboard-main">
+        <section className="dashboard-panel documents-panel">
+          <div className="documents-header">
+            <h2>My documents</h2>
+            {docTree && (
+              <span className="documents-count">
+                {docTree.file_count} / {docTree.max_files} files
+              </span>
+            )}
+          </div>
+
+          <p className="documents-target">
+            <label htmlFor="document-folder">Put files in</label>
+            <select
+              id="document-folder"
+              value={selectedFolder}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+              disabled={docBusy}
+            >
+              <option value="">My documents</option>
+              {folderPaths.map((path: string) => (
+                <option key={path} value={path}>
+                  {path}
+                </option>
+              ))}
+            </select>
+          </p>
+
+          <div className="documents-actions">
+            <input
+              ref={fileInputRef}
+              id="document-upload"
+              type="file"
+              accept="application/pdf,.pdf"
+              className="doc-file-input"
+              onChange={handleUploadFile}
+              disabled={
+                docBusy || (docTree ? docTree.file_count >= docTree.max_files : false)
+              }
+            />
+            <label htmlFor="document-upload" className="btn-solid btn-compact doc-upload-btn">
+              {docBusy ? "Working..." : uploadLabel}
+            </label>
+
+            <form className="doc-folder-form" onSubmit={handleCreateFolder}>
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="New folder name"
+                maxLength={64}
+                disabled={docBusy}
+              />
+              <button
+                type="submit"
+                className="btn-outline btn-compact"
+                disabled={docBusy || !newFolderName.trim()}
+              >
+                Add
+              </button>
+            </form>
+          </div>
+
+          {docTree && docTree.file_count >= docTree.max_files && (
+            <p className="documents-note">
+              File limit reached. Delete a file to upload another.
+            </p>
+          )}
+          {docError && <p className="control-error">{docError}</p>}
+
+          {docTree === null ? (
+            <p className="documents-note">Loading documents...</p>
+          ) : docTree.nodes.length === 0 ? (
+            <p className="documents-note">
+              No documents yet. Upload a PDF to get started.
+            </p>
+          ) : (
+            <DocumentTree
+              nodes={docTree.nodes}
+              selectedFolder={selectedFolder}
+              expanded={expanded}
+              busy={docBusy}
+              onToggleFolder={handleToggleFolder}
+              onSelectFolder={handleSelectFolder}
+              onOpenFile={handleOpenFile}
+              onMoveFile={handleMoveFile}
+              onDelete={handleDeleteNode}
+            />
+          )}
+        </section>
+
         <section className="dashboard-panel">
           <h1>Your followed stocks</h1>
 

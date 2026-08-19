@@ -53,7 +53,12 @@ S3_MAX_ATTEMPTS = 3
 S3_PRESIGNED_EXPIRE_SECONDS = 3600
 S3_MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024
 S3_MULTIPART_CHUNK_BYTES = 8 * 1024 * 1024
-S3_DELETE_BATCH_SIZE = 1000
+# boto3 1.36+ sends checksums on every request by default. Supabase Storage
+# does not implement those headers, so keep them on operations that actually
+# require them. DeleteObjects still requires a checksum even then, which is
+# why the client deletes keys one at a time with DeleteObject instead.
+S3_REQUEST_CHECKSUM = "when_required"
+S3_RESPONSE_CHECKSUM = "when_required"
 
 # S3 has no real folders, only key prefixes. The Supabase dashboard fakes an
 # empty folder with a 0-byte object of this name and expects clients to hide it

@@ -6,15 +6,17 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.responses import Response
 
 from database_client import db
+from object_storage_client import ObjectStorageError
 from routers.admin_routes import router as admin_router
 from routers.auth_routes import router as auth_router
+from routers.documents_routes import router as documents_router
 from routers.stocks_routes import router as stocks_router
 from routers.watchlist_routes import router as watchlist_router
 
@@ -24,6 +26,18 @@ app = FastAPI(title="Stock Tracker API")
 @app.on_event("shutdown")
 async def shutdown() -> None:
     await db.close()
+
+
+@app.exception_handler(ObjectStorageError)
+async def handle_object_storage_error(
+    _request: Request,
+    exc: ObjectStorageError,
+) -> JSONResponse:
+    """Storage outages are upstream failures, not client mistakes."""
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": f"Document storage unavailable: {exc}"},
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +74,7 @@ app.include_router(auth_router)
 app.include_router(watchlist_router)
 app.include_router(stocks_router)
 app.include_router(admin_router)
+app.include_router(documents_router)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
