@@ -10,6 +10,7 @@ from database_client import db
 
 ARTICLES_TABLE = "news_articles"
 STOCK_ARTICLES_TABLE = "stock_articles"
+QUOTES_TABLE = "stock_quotes"
 
 SUMMARY_STATUS_NONE = "none"
 SUMMARY_STATUS_PENDING = "pending"
@@ -21,7 +22,7 @@ _STALE_CLAIM_MINUTES = 3
 
 _ARTICLE_COLUMNS = (
     "article_id, url_hash, url, title, source, published_at, "
-    "provider, provider_article_id, provider_summary, "
+    "provider, provider_article_id, provider_summary, text, "
     "ai_summary, ai_summary_status, ai_summary_model, ai_summary_error, "
     "ai_summary_started_at, ai_summary_updated_at, created_at"
 )
@@ -58,6 +59,7 @@ def _normalize_article(row: dict[str, Any]) -> dict[str, Any]:
         "published_at": _normalize_datetime(row.get("published_at")),
         "provider": row.get("provider"),
         "provider_summary": row.get("provider_summary"),
+        "text": row.get("text"),
         "ai_summary": row.get("ai_summary"),
         "ai_summary_status": row.get("ai_summary_status") or SUMMARY_STATUS_NONE,
         "ai_summary_model": row.get("ai_summary_model"),
@@ -76,14 +78,14 @@ async def upsert_article(
     provider_summary: Optional[str] = None,
     conn: Optional[asyncpg.Connection] = None,
 ) -> dict[str, Any]:
-    """Insert or refresh an article by URL. Never touches cached AI summary fields."""
+    """Insert or refresh an article by URL. Never overwrites a stored full text body."""
     row = await db.fetch_one(
         f"""
         INSERT INTO {ARTICLES_TABLE} (
             article_id, url_hash, url, title, source, published_at,
-            provider, provider_article_id, provider_summary
+            provider, provider_article_id, provider_summary, text
         )
-        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $9)
         ON CONFLICT (url_hash) DO UPDATE SET
             title = EXCLUDED.title,
             source = COALESCE(EXCLUDED.source, {ARTICLES_TABLE}.source),
@@ -95,7 +97,8 @@ async def upsert_article(
             ),
             provider_summary = COALESCE(
                 EXCLUDED.provider_summary, {ARTICLES_TABLE}.provider_summary
-            )
+            ),
+            text = COALESCE({ARTICLES_TABLE}.text, EXCLUDED.provider_summary)
         RETURNING {_ARTICLE_COLUMNS}
         """,
         str(uuid4()),
@@ -204,6 +207,7 @@ async def set_summary(
     ai_summary_status: str,
     ai_summary_model: Optional[str] = None,
     ai_summary_error: Optional[str] = None,
+    text: Optional[str] = None,
     conn: Optional[asyncpg.Connection] = None,
 ) -> Optional[dict[str, Any]]:
     row = await db.fetch_one(
@@ -213,6 +217,7 @@ async def set_summary(
             ai_summary_status = $3,
             ai_summary_model = $4,
             ai_summary_error = $5,
+            text = COALESCE($6, {ARTICLES_TABLE}.text),
             ai_summary_updated_at = NOW()
         WHERE article_id = $1::uuid
         RETURNING {_ARTICLE_COLUMNS}
@@ -222,9 +227,35 @@ async def set_summary(
         ai_summary_status,
         ai_summary_model,
         ai_summary_error,
+        text,
         conn=conn,
     )
     return _normalize_article(row) if row else None
+
+
+async def list_recent_texts_by_symbol(
+    symbol: str,
+    days: int = 7,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[str]:
+    """Read article bodies for one ticker. Joins quotes read-only to filter by symbol."""
+    rows = await db.fetch_all(
+        f"""
+        SELECT na.text
+        FROM {ARTICLES_TABLE} na
+        JOIN {STOCK_ARTICLES_TABLE} sa ON na.article_id = sa.article_id
+        JOIN {QUOTES_TABLE} sq ON sa.stock_id = sq.stock_id
+        WHERE UPPER(sq.symbol) = UPPER($1)
+          AND na.published_at >= NOW() - ($2::int * INTERVAL '1 day')
+          AND na.text IS NOT NULL
+          AND BTRIM(na.text) <> ''
+        ORDER BY na.published_at DESC NULLS LAST
+        """,
+        symbol,
+        max(1, int(days)),
+        conn=conn,
+    )
+    return [str(row["text"]) for row in rows if row.get("text")]
 
 
 async def delete_older_than(
@@ -234,7 +265,7 @@ async def delete_older_than(
     """Delete articles outside the retention window (AI summaries go with the row).
 
     Keeps the last ``days`` calendar days inclusive. Example with days=7 on Aug 9:
-    keeps Aug 3..Aug 9 and deletes anything older.
+    keeps Aug 3..Aug 9 and deletes anything older. ``stock_articles`` links cascade.
     """
     window = max(1, int(days))
     return await db.execute(

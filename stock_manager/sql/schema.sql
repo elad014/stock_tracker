@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS user_auth_data (
 
 -- ---------------------------------------------------------------------------
 -- Current quotes for stocks that are actively watched
+-- Owner: stock_manager (read/write). news_agent may JOIN this table read-only.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock_quotes (
     stock_id UUID PRIMARY KEY,
@@ -87,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_stock_id ON watchlist (stock_id);
 
 -- ---------------------------------------------------------------------------
 -- News articles fetched from the news provider
+-- Owner: news_agent (read/write). stock_manager does not touch these tables.
 -- One row per article URL, shared by every stock that references it, so the
 -- AI summary is generated once and reused by all users.
 -- url_hash is a sha256 hex digest because raw URLs can exceed the btree limit.
@@ -102,6 +104,7 @@ CREATE TABLE IF NOT EXISTS news_articles (
     provider TEXT NOT NULL DEFAULT 'finnhub',
     provider_article_id TEXT,
     provider_summary TEXT,
+    text TEXT,
     ai_summary TEXT,
     ai_summary_status TEXT NOT NULL DEFAULT 'none',
     ai_summary_model TEXT,
@@ -114,8 +117,12 @@ CREATE TABLE IF NOT EXISTS news_articles (
 CREATE INDEX IF NOT EXISTS idx_news_articles_published_at
     ON news_articles (published_at DESC);
 
+ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS text TEXT;
+
 -- ---------------------------------------------------------------------------
 -- Many-to-many link between stocks and articles
+-- Owner: news_agent (read/write). stock_id references stock_quotes (owned by
+-- stock_manager). news_agent reads stock_quotes only to join/filter by symbol.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock_articles (
     stock_id UUID NOT NULL REFERENCES stock_quotes (stock_id) ON DELETE CASCADE,

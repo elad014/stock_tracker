@@ -6,7 +6,7 @@ from typing import Any
 from constant import ARTICLE_RETENTION_DAYS
 from llm_provider_client import LLMProviderClient
 from news_provider_client import NewsItem, NewsProviderClient
-from services.article_service import to_article_payload
+from services.article_service import purge_old_articles, to_article_payload, upsert_stock_articles
 from stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
@@ -64,10 +64,11 @@ async def run_news_update() -> None:
     """Fetch today's Finnhub articles per stock, store them, update rollup summary.
 
     Each run:
-    1. Ask Finnhub for every article published today
-    2. Upsert + link those articles (older days stay until retention purge)
-    3. Rebuild stock_summery from today's articles only
-    4. Delete articles older than ARTICLE_RETENTION_DAYS (summaries go with them)
+    1. List stocks from stock-manager (`stock_quotes`)
+    2. Ask Finnhub for every article published today
+    3. Upsert + link those articles in `news_articles` / `stock_articles`
+    4. Rebuild stock_summery from today's articles only (HTTP to stock-manager)
+    5. Delete articles older than ARTICLE_RETENTION_DAYS (summaries go with them)
     """
     stock_manager = _stock_manager_client()
     stocks = await stock_manager.list_stocks()
@@ -100,7 +101,7 @@ async def run_news_update() -> None:
 
             payload = to_article_payload(news_items)
             if payload:
-                await stock_manager.upsert_stock_articles(stock_id, payload)
+                await upsert_stock_articles(stock_id, payload)
 
             news_text = _build_news_text(news_items)
             summary_result = await llm_client.summarize(
@@ -133,6 +134,6 @@ async def run_news_update() -> None:
             continue
 
     try:
-        await stock_manager.cleanup_old_articles(ARTICLE_RETENTION_DAYS)
+        await purge_old_articles(ARTICLE_RETENTION_DAYS)
     except Exception:
         logger.exception("Failed to purge articles older than %s days", ARTICLE_RETENTION_DAYS)

@@ -65,5 +65,45 @@ class NewsAgentClient:
             self._raise_from_response(response)
         return response.json()
 
+    async def list_stock_articles(
+        self,
+        stock_id: str,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/stocks/{stock_id}/articles",
+                headers=self._headers(),
+                params={"limit": limit},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        payload = response.json()
+        if not isinstance(payload, list):
+            return []
+        return payload
+
+    async def search_and_summarize(self, symbol: str, query: str) -> str:
+        ticker: str = symbol.strip().upper()
+        question: str = query.strip()
+        if not ticker:
+            raise HTTPException(400, "symbol must not be empty")
+        if not question:
+            raise HTTPException(400, "query must not be empty")
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                f"{self._base_url}/api/v1/news/search-and-summarize",
+                headers=self._headers(),
+                json={"symbol": ticker, "query": question},
+            )
+        if response.status_code != 200:
+            self._raise_from_response(response)
+        payload = response.json()
+        summary = str(payload.get("summary") or "").strip()
+        if not summary:
+            raise HTTPException(502, "News agent returned an empty summary")
+        return summary
+
 
 news_agent_client = NewsAgentClient()

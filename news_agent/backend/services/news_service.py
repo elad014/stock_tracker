@@ -5,7 +5,14 @@ from typing import Any, Optional
 
 from fastapi import HTTPException, status
 
-from models.news import NewsArticle, StockNewsResponse
+from constant import (
+    ARTICLE_RETENTION_DAYS,
+    NEWS_SEARCH_MAX_CHARS,
+    NEWS_SEARCH_SYSTEM_PROMPT,
+)
+from db_logics import articles_db_logic as articles_db
+from llm_provider_client import LLMProviderClient
+from models.news import NewsArticle, SearchAndSummarizeResponse, StockNewsResponse
 from news_provider_client import NewsProviderClient
 
 logger = logging.getLogger(__name__)
@@ -13,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 def _news_provider() -> NewsProviderClient:
     return NewsProviderClient()
+
+
+def _llm_client() -> LLMProviderClient:
+    return LLMProviderClient()
 
 
 async def _run_provider(func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -68,3 +79,65 @@ async def get_stock_news(
         count=len(articles),
         articles=articles,
     )
+
+
+def _join_articles(bodies: list[str]) -> str:
+    joined = "\n\n---\n\n".join(item.strip() for item in bodies if item.strip())
+    if len(joined) <= NEWS_SEARCH_MAX_CHARS:
+        return joined
+    return joined[:NEWS_SEARCH_MAX_CHARS]
+
+
+async def search_and_summarize(symbol: str, query: str) -> SearchAndSummarizeResponse:
+    """Answer a question using stored article bodies from the last 7 days."""
+    ticker: str = symbol.strip().upper()
+    question: str = query.strip()
+    if not ticker:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "symbol must not be empty")
+    if not question:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "query must not be empty")
+
+    empty = SearchAndSummarizeResponse(
+        summary="No recent news found for this symbol.",
+    )
+    try:
+        bodies = await articles_db.list_recent_texts_by_symbol(
+            ticker,
+            days=ARTICLE_RETENTION_DAYS,
+        )
+    except Exception as exc:
+        logger.exception("Failed to load article texts for %s", ticker)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to load recent articles",
+        ) from exc
+
+    if not bodies:
+        return empty
+
+    corpus = _join_articles(bodies)
+    if not corpus:
+        return empty
+
+    user_message = (
+        f"Ticker: {ticker}\n"
+        f"User query: {question}\n\n"
+        f"News articles:\n{corpus}"
+    )
+    try:
+        result = await _llm_client().chat_completion(
+            [
+                {"role": "system", "content": NEWS_SEARCH_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ]
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("News search LLM failed for %s", ticker)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    summary = result.content.strip()
+    if not summary:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "LLM returned an empty summary")
+    return SearchAndSummarizeResponse(summary=summary)
