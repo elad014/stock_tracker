@@ -102,7 +102,6 @@ CREATE TABLE IF NOT EXISTS news_articles (
     source TEXT,
     published_at TIMESTAMPTZ,
     provider TEXT NOT NULL DEFAULT 'finnhub',
-    provider_article_id TEXT,
     provider_summary TEXT,
     text TEXT,
     ai_summary TEXT,
@@ -118,6 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_news_articles_published_at
     ON news_articles (published_at DESC);
 
 ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS text TEXT;
+ALTER TABLE news_articles DROP COLUMN IF EXISTS provider_article_id;
 
 -- ---------------------------------------------------------------------------
 -- Many-to-many link between stocks and articles

@@ -22,7 +22,7 @@ _STALE_CLAIM_MINUTES = 3
 
 _ARTICLE_COLUMNS = (
     "article_id, url_hash, url, title, source, published_at, "
-    "provider, provider_article_id, provider_summary, text, "
+    "provider, provider_summary, text, "
     "ai_summary, ai_summary_status, ai_summary_model, ai_summary_error, "
     "ai_summary_started_at, ai_summary_updated_at, created_at"
 )
@@ -74,7 +74,6 @@ async def upsert_article(
     source: Optional[str] = None,
     published_at: Optional[datetime] = None,
     provider: str = "finnhub",
-    provider_article_id: Optional[str] = None,
     provider_summary: Optional[str] = None,
     text: Optional[str] = None,
     conn: Optional[asyncpg.Connection] = None,
@@ -84,17 +83,14 @@ async def upsert_article(
         f"""
         INSERT INTO {ARTICLES_TABLE} (
             article_id, url_hash, url, title, source, published_at,
-            provider, provider_article_id, provider_summary, text
+            provider, provider_summary, text
         )
-        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (url_hash) DO UPDATE SET
             title = EXCLUDED.title,
             source = COALESCE(EXCLUDED.source, {ARTICLES_TABLE}.source),
             published_at = COALESCE(
                 EXCLUDED.published_at, {ARTICLES_TABLE}.published_at
-            ),
-            provider_article_id = COALESCE(
-                EXCLUDED.provider_article_id, {ARTICLES_TABLE}.provider_article_id
             ),
             provider_summary = COALESCE(
                 EXCLUDED.provider_summary, {ARTICLES_TABLE}.provider_summary
@@ -109,7 +105,6 @@ async def upsert_article(
         source,
         published_at,
         provider,
-        provider_article_id,
         provider_summary,
         text,
         conn=conn,
