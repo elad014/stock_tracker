@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from zoneinfo import ZoneInfo
 
+from database_client import db
 from jobs.news_update import run_news_update
 from models.jobs import HealthResponse
 from routers.articles_routes import router as articles_router
@@ -25,8 +26,10 @@ scheduler = AsyncIOScheduler()
 API_DESCRIPTION = """
 Internal News Agent for stock_tracker.
 
-Orchestrates the news summary pipeline — no direct DB access. Summaries go
-through ``llm_provider_client`` (LiteLLM), not llm-service.
+Owns `news_articles` and `stock_articles` on the shared Neon database.
+Reads `stock_quotes` only to join/filter by ticker. Rollup `stock_summery`
+is written through stock-manager HTTP (news-agent does not write quotes).
+Summaries go through ``llm_provider_client`` (LiteLLM), not llm-service.
 
 ## Auth
 News and agent endpoints require header:
@@ -35,9 +38,11 @@ News and agent endpoints require header:
 
 ## Swagger abilities
 1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
-2. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via LiteLLM -> update DB
-3. **Articles** — `POST /stocks/{stock_id}/articles/sync` to store a stock's articles, and
-   `POST /articles/{article_id}/summarize` to summarize one article once for all users
+2. **Search** — `POST /api/v1/news/search-and-summarize`: answer a query from stored
+   article text for one ticker (last 7 days)
+3. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via LiteLLM -> HTTP update `stock_summery`
+4. **Articles** — `GET /stocks/{stock_id}/articles`, `POST /stocks/{stock_id}/articles/sync`,
+   `POST /articles/{article_id}/summarize`
 
 News source: Finnhub (`FINNHUB_API_KEY`) via `common/news_provider_client`.
 """
@@ -75,6 +80,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         scheduler.shutdown(wait=False)
+        await db.close()
 
 
 app = FastAPI(

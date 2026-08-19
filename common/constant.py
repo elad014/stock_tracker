@@ -35,6 +35,11 @@ ARTICLE_EXTRACT_MAX_CHARS = 12_000
 # News article retention (calendar days, inclusive)
 # ---------------------------------------------------------------------------
 ARTICLE_RETENTION_DAYS = 7
+NEWS_SEARCH_MAX_CHARS = 24_000
+NEWS_SEARCH_SYSTEM_PROMPT = (
+    "You are a financial news assistant. Answer the user's query based strictly "
+    "on the provided news articles. If the articles do not contain the answer, say so."
+)
 
 # ---------------------------------------------------------------------------
 # Object storage (Supabase Storage over the S3 protocol, or AWS S3)

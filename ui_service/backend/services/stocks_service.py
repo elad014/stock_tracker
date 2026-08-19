@@ -59,7 +59,7 @@ def _to_article(payload: dict[str, Any]) -> StockArticle:
 
 async def list_stock_articles(stock_id: str, limit: int = 100) -> list[StockArticle]:
     """Read-only: articles are filled by news-agent cron / Swagger, never by the user."""
-    rows = await stock_manager.list_stock_articles(stock_id, limit)
+    rows = await news_agent.list_stock_articles(stock_id, limit)
     return [_to_article(row) for row in rows]
 
 

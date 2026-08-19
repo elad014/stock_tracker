@@ -23,7 +23,26 @@ class ArticleSummaryResponse(BaseModel):
     )
 
 
+class ArticleRecord(BaseModel):
+    article_id: str
+    url: str
+    title: str
+    source: Optional[str] = None
+    published_at: Optional[datetime] = None
+    provider: Optional[str] = None
+    provider_summary: Optional[str] = None
+    ai_summary: Optional[str] = None
+    ai_summary_status: str = Field(..., examples=["ready"])
+    ai_summary_model: Optional[str] = None
+    ai_summary_error: Optional[str] = None
+    ai_summary_updated_at: Optional[datetime] = None
+
+
 class ArticleSyncResponse(BaseModel):
     stock_id: str
     symbol: str
     stored: int = Field(..., ge=0, description="Number of articles stored or refreshed")
+
+
+class MessageResponse(BaseModel):
+    message: str

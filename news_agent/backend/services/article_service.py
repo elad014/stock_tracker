@@ -1,12 +1,14 @@
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import HTTPException, status
 
 from article_extractor_client import ArticleExtractorClient
+from db_logics import articles_db_logic as articles_db
 from llm_provider_client import LLMProviderClient
-from models.articles import ArticleSummaryResponse, ArticleSyncResponse
+from models.articles import ArticleRecord, ArticleSummaryResponse, ArticleSyncResponse
 from news_provider_client import NewsItem, NewsProviderClient
 from stock_manager_client import StockManagerClient
 
@@ -37,8 +39,19 @@ async def _run_blocking(func: Any, *args: Any, **kwargs: Any) -> Any:
     return await asyncio.to_thread(func, *args, **kwargs)
 
 
+def _parse_published_at(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
 def to_article_payload(items: list[NewsItem]) -> list[dict[str, Any]]:
-    """Convert provider news items into the stock-manager upsert payload."""
+    """Convert provider news items into the local upsert payload."""
     payload: list[dict[str, Any]] = []
     for item in items:
         if not item.url:
@@ -76,14 +89,71 @@ def _article_response(
     )
 
 
+def _to_record(article: dict[str, Any]) -> ArticleRecord:
+    return ArticleRecord(
+        article_id=article["article_id"],
+        url=article["url"],
+        title=article["title"],
+        source=article.get("source"),
+        published_at=article.get("published_at"),
+        provider=article.get("provider"),
+        provider_summary=article.get("provider_summary"),
+        ai_summary=article.get("ai_summary"),
+        ai_summary_status=article.get("ai_summary_status") or "none",
+        ai_summary_model=article.get("ai_summary_model"),
+        ai_summary_error=article.get("ai_summary_error"),
+        ai_summary_updated_at=article.get("ai_summary_updated_at"),
+    )
+
+
+async def upsert_stock_articles(
+    stock_id: str,
+    articles: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Insert/update news_articles and link them via stock_articles."""
+    stored: list[dict[str, Any]] = []
+    for item in articles:
+        url = str(item.get("url") or "").strip()
+        title = str(item.get("title") or "").strip()
+        if not url or not title:
+            continue
+        article = await articles_db.upsert_article(
+            url=url,
+            title=title,
+            source=item.get("source"),
+            published_at=_parse_published_at(item.get("published_at")),
+            provider=str(item.get("provider") or "finnhub"),
+            provider_article_id=item.get("provider_article_id"),
+            provider_summary=item.get("provider_summary"),
+        )
+        await articles_db.link_article_to_stock(stock_id, article["article_id"])
+        stored.append(article)
+    return stored
+
+
+async def list_stock_articles(stock_id: str, limit: int = 100) -> list[ArticleRecord]:
+    rows = await articles_db.list_by_stock(stock_id, limit=limit)
+    return [_to_record(row) for row in rows]
+
+
+async def purge_old_articles(days: int = 7) -> dict[str, str]:
+    result = await articles_db.delete_older_than(days)
+    orphans = await articles_db.delete_orphans_older_than(days)
+    logger.info("Purged articles older than %s days (%s, orphans=%s)", days, result, orphans)
+    return {
+        "message": f"Purged articles older than {days} days",
+        "result": result,
+        "orphans": orphans,
+    }
+
+
 async def sync_stock_articles(
     stock_id: str,
     outputsize: int = 10,
 ) -> ArticleSyncResponse:
     """Fetch today's Finnhub articles for one stock and store them (Swagger / ops only)."""
     _ = outputsize
-    stock_manager = _stock_manager_client()
-    stock = await stock_manager.get_stock(stock_id)
+    stock = await _stock_manager_client().get_stock(stock_id)
     symbol = str(stock.get("symbol") or "").strip().upper()
     if not symbol:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock has no symbol")
@@ -101,10 +171,8 @@ async def sync_stock_articles(
         ) from exc
 
     payload = to_article_payload(items)
-    if payload:
-        await stock_manager.upsert_stock_articles(stock_id, payload)
-
-    return ArticleSyncResponse(stock_id=stock_id, symbol=symbol, stored=len(payload))
+    stored = await upsert_stock_articles(stock_id, payload) if payload else []
+    return ArticleSyncResponse(stock_id=stock_id, symbol=symbol, stored=len(stored))
 
 
 def _summary_source(article: dict[str, Any], extracted_text: Optional[str]) -> str:
@@ -119,20 +187,23 @@ def _summary_source(article: dict[str, Any], extracted_text: Optional[str]) -> s
 
 async def summarize_article(article_id: str) -> ArticleSummaryResponse:
     """Summarize one article exactly once, no matter how many users ask."""
-    stock_manager = _stock_manager_client()
-    claim = await stock_manager.claim_article_summary(article_id)
-    article: dict[str, Any] = claim["article"]
+    existing = await articles_db.get_by_id(article_id)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
 
-    if not claim.get("claimed"):
-        # Another request owns the work, or the summary is already cached.
-        return _article_response(article)
+    claimed = await articles_db.claim_for_summary(article_id)
+    if claimed is None:
+        current = await articles_db.get_by_id(article_id)
+        if current is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
+        return _article_response(current)
 
     extracted_text: Optional[str] = None
     try:
         extractor = _extractor()
-        extracted_text = await _run_blocking(extractor.extract, article["url"])
+        extracted_text = await _run_blocking(extractor.extract, claimed["url"])
 
-        text = _summary_source(article, extracted_text)
+        text = _summary_source(claimed, extracted_text)
         if not text.strip():
             raise RuntimeError("No article text available to summarize")
 
@@ -141,24 +212,31 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
         if not content:
             raise RuntimeError("LLM returned an empty summary")
 
-        updated = await stock_manager.update_article_summary(
+        updated = await articles_db.set_summary(
             article_id,
             ai_summary=content,
             ai_summary_status=STATUS_READY,
             ai_summary_model=result.model or None,
+            text=text,
         )
+        if updated is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
         logger.info(
             "Summarized article %s (extracted=%s)",
             article_id,
             bool(extracted_text),
         )
         return _article_response(updated, extracted=bool(extracted_text))
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Article summarize failed for %s", article_id)
-        failed = await stock_manager.update_article_summary(
+        failed = await articles_db.set_summary(
             article_id,
             ai_summary=None,
             ai_summary_status=STATUS_FAILED,
             ai_summary_error=str(exc)[:500],
         )
+        if failed is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found") from exc
         return _article_response(failed)

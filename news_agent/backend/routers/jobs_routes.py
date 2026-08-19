@@ -21,8 +21,8 @@ router = APIRouter(
         "Runs the full news agent for **all** stocks, one stock at a time:\n\n"
         "1. List stocks from stock-manager\n"
         "2. Fetch **all** Finnhub articles published **today** for that stock\n"
-        "3. Upsert those articles (keep last 7 days in DB)\n"
-        "4. Rebuild `stock_summery` from today's articles only via LiteLLM\n"
+        "3. Upsert those articles locally into `news_articles` / `stock_articles`\n"
+        "4. Rebuild `stock_summery` via HTTP `PUT /stocks/{stock_id}/summary`\n"
         "5. Delete articles older than 7 days (AI summaries deleted with them)\n\n"
         "Stocks with no news today are skipped. Failures on one stock do not stop the rest."
     ),

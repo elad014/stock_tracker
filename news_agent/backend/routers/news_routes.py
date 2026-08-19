@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Path, Query
 
 from deps import verify_internal_api_key
-from models.news import StockNewsResponse
+from models.news import SearchAndSummarizeRequest, SearchAndSummarizeResponse, StockNewsResponse
 import services.news_service as news_service
 
 router = APIRouter(
@@ -45,3 +45,20 @@ async def get_news_for_stock(
     ),
 ) -> StockNewsResponse:
     return await news_service.get_stock_news(symbol, outputsize, day=day)
+
+
+@router.post(
+    "/api/v1/news/search-and-summarize",
+    tags=["News"],
+    summary="Answer a question from recent stored article text",
+    description=(
+        "Reads `news_articles.text` for the ticker from the last 7 days "
+        "(JOIN stock_articles + stock_quotes) and asks LiteLLM to answer `query` "
+        "from that corpus only."
+    ),
+    response_model=SearchAndSummarizeResponse,
+)
+async def search_and_summarize(
+    req: SearchAndSummarizeRequest,
+) -> SearchAndSummarizeResponse:
+    return await news_service.search_and_summarize(req.symbol, req.query)

@@ -16,3 +16,12 @@ class StockNewsResponse(BaseModel):
     symbol: str = Field(..., examples=["AAPL"])
     count: int = Field(..., ge=0)
     articles: list[NewsArticle]
+
+
+class SearchAndSummarizeRequest(BaseModel):
+    symbol: str = Field(..., min_length=1, examples=["AAPL"])
+    query: str = Field(..., min_length=1, examples=["Why did the stock drop today?"])
+
+
+class SearchAndSummarizeResponse(BaseModel):
+    summary: str
