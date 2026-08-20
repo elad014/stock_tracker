@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 
 from article_extractor import ArticleExtractor
 from db_logics import articles_db_logic as articles_db
+from llm_limits import article_summarize_limiter
 from llm_provider_client import LLMProviderClient
 from models.articles import ArticleRecord, ArticleSummaryResponse, ArticleSyncResponse
 from news_provider_client import NewsItem, NewsProviderClient
@@ -14,6 +15,7 @@ from stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
 
+STATUS_NONE = "none"
 STATUS_READY = "ready"
 STATUS_PENDING = "pending"
 STATUS_FAILED = "failed"
@@ -258,6 +260,18 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
         if current is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
         return _article_response(current)
+
+    try:
+        article_summarize_limiter.assert_allowed("article-summarize")
+    except HTTPException:
+        await articles_db.set_summary(
+            article_id,
+            ai_summary=claimed.get("ai_summary"),
+            ai_summary_status=STATUS_NONE,
+            ai_summary_error=None,
+        )
+        raise
+    article_summarize_limiter.record("article-summarize")
 
     extracted_text: Optional[str] = None
     try:

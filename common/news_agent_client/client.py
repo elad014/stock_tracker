@@ -27,7 +27,12 @@ class NewsAgentClient:
             detail = payload.get("detail", payload)
         except Exception:
             detail = response.text or "News agent request failed"
-        raise HTTPException(response.status_code, detail)
+        retry_after: Optional[str] = response.headers.get("Retry-After")
+        raise HTTPException(
+            response.status_code,
+            detail,
+            headers={"Retry-After": retry_after} if retry_after else None,
+        )
 
     async def get_news(self, symbol: str, outputsize: int = 5) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=60.0) as client:

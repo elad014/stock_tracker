@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from deps import verify_internal_api_key
+from job_limits import cleanup_archive_guard, daily_update_guard
 from jobs.cleanup_archive import run_cleanup_archive
 from jobs.daily_update import run_daily_update
 import services.stock_service as stock_service
@@ -228,9 +229,15 @@ async def unwatch_stock_everywhere(
         "Manually runs the same job as the daily cron: refresh quotes and "
         "fill any missing history from the last stored day through today. "
         "By default it still skips weekends / closed market; "
-        "set force=true to run anyway (useful for testing)."
+        "set force=true to run anyway (useful for testing).\n\n"
+        "The weekday scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
+        "and at most once per 15 minutes, so a stolen key cannot stack Twelve Data calls."
     ),
     response_model=JobTriggerResponse,
+    responses={
+        409: {"description": "A daily-update run is already in progress"},
+        429: {"description": "HTTP trigger cooldown (scheduled job is not limited)"},
+    },
 )
 async def trigger_daily_update(
     force: bool = Query(
@@ -238,7 +245,10 @@ async def trigger_daily_update(
         description="If true, ignore weekend and market-closed checks",
     ),
 ) -> JobTriggerResponse:
-    await run_daily_update(force=force)
+    async def _job() -> None:
+        await run_daily_update(force=force)
+
+    await daily_update_guard.run_from_http(_job)
     return JobTriggerResponse(
         job="daily-update",
         message="Daily update job completed" + (" (forced)" if force else ""),
@@ -251,12 +261,18 @@ async def trigger_daily_update(
     summary="Trigger cleanup and archive",
     description=(
         "Manually runs the cleanup job: for stocks with no watchlist entries, "
-        "moves history to stock_history_archive and deletes the quote."
+        "moves history to stock_history_archive and deletes the quote.\n\n"
+        "The hourly scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
+        "and at most once per 15 minutes."
     ),
     response_model=JobTriggerResponse,
+    responses={
+        409: {"description": "A cleanup/archive run is already in progress"},
+        429: {"description": "HTTP trigger cooldown (scheduled job is not limited)"},
+    },
 )
 async def trigger_cleanup_archive() -> JobTriggerResponse:
-    await run_cleanup_archive()
+    await cleanup_archive_guard.run_from_http(run_cleanup_archive)
     return JobTriggerResponse(
         job="cleanup-archive",
         message="Cleanup/archive job completed",

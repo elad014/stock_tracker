@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from zoneinfo import ZoneInfo
 
 from database_client import db
-from jobs.cleanup_archive import run_cleanup_archive
-from jobs.daily_update import run_daily_update
+from internal_docs import disabled_docs_kwargs, mount_protected_docs
+from jobs.cleanup_archive import run_scheduled_cleanup_archive
+from jobs.daily_update import run_scheduled_daily_update
 from models.stocks import HealthResponse
 from routers.stocks_routes import router as stocks_router
 
@@ -26,6 +27,9 @@ Internal Stock Manager service for stock_tracker.
 All write endpoints require header:
 
 `X-Internal-Api-Key: <INTERNAL_API_KEY>`
+
+`/docs`, `/redoc`, and `/openapi.json` require the same key (header, HTTP Basic
+password, or `?api_key=`). They are not public.
 
 Use the **Authorize** button in Swagger and paste the same key configured in `.env`.
 
@@ -60,13 +64,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     cleanup_cron = os.getenv("CLEANUP_CRON", "0 * * * *")
 
     scheduler.add_job(
-        run_daily_update,
+        run_scheduled_daily_update,
         trigger=_parse_cron(daily_cron, tz),
         id="daily_update",
         replace_existing=True,
     )
     scheduler.add_job(
-        run_cleanup_archive,
+        run_scheduled_cleanup_archive,
         trigger=_parse_cron(cleanup_cron, tz),
         id="cleanup_archive",
         replace_existing=True,
@@ -85,10 +89,7 @@ app = FastAPI(
     description=API_DESCRIPTION,
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    swagger_ui_parameters={"persistAuthorization": True},
+    **disabled_docs_kwargs(),
     openapi_tags=[
         {
             "name": "Watchlist",
@@ -113,6 +114,7 @@ app = FastAPI(
     ],
 )
 app.include_router(stocks_router)
+mount_protected_docs(app)
 
 
 @app.api_route(

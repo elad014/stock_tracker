@@ -1,23 +1,22 @@
-"""Auth-only limiter for login, register, and password reset.
+"""In-process sliding-window limiter for LLM HTTP calls.
 
-Private to ui-service. Do not import from agents or use for LLM spend.
-LLM call limits and prompt fencing live in ``common/llm_guard``.
+Shared by all agents. Pass agent-specific max_attempts, window, and error text
+when constructing. Do not use this for login or password reset.
 """
 
 import time
 from threading import Lock
 
-from fastapi import HTTPException, Request, status
-
-_TOO_MANY: str = "Too many attempts, please try again later"
+from fastapi import HTTPException, status
 
 
-class AuthRateLimiter:
-    """In-process sliding-window limiter for identity endpoints only."""
+class LlmRateLimiter:
+    """Cap how often a key may consume an LLM call."""
 
-    def __init__(self, max_attempts: int, window_seconds: int) -> None:
+    def __init__(self, max_attempts: int, window_seconds: int, detail: str) -> None:
         self._max_attempts: int = max_attempts
         self._window_seconds: int = window_seconds
+        self._detail: str = detail
         self._hits: dict[str, list[float]] = {}
         self._lock: Lock = Lock()
 
@@ -38,7 +37,7 @@ class AuthRateLimiter:
                 retry_after: int = max(1, int(self._window_seconds - (now - stamps[0])))
                 raise HTTPException(
                     status.HTTP_429_TOO_MANY_REQUESTS,
-                    _TOO_MANY,
+                    self._detail,
                     headers={"Retry-After": str(retry_after)},
                 )
 
@@ -49,19 +48,11 @@ class AuthRateLimiter:
             stamps.append(now)
             self._hits[key] = stamps
 
+    def consume(self, key: str) -> None:
+        """Reject if over quota, otherwise count this call."""
+        self.assert_allowed(key)
+        self.record(key)
+
     def reset(self, key: str) -> None:
         with self._lock:
             self._hits.pop(key, None)
-
-
-def client_ip(request: Request) -> str:
-    if request.client is None or not request.client.host:
-        return "unknown"
-    return request.client.host
-
-
-login_by_email = AuthRateLimiter(max_attempts=5, window_seconds=15 * 60)
-login_by_ip = AuthRateLimiter(max_attempts=20, window_seconds=15 * 60)
-register_by_ip = AuthRateLimiter(max_attempts=5, window_seconds=60 * 60)
-reset_by_email = AuthRateLimiter(max_attempts=5, window_seconds=15 * 60)
-reset_by_ip = AuthRateLimiter(max_attempts=10, window_seconds=15 * 60)

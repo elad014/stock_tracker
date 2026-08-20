@@ -10,7 +10,8 @@ from fastapi import FastAPI
 from zoneinfo import ZoneInfo
 
 from database_client import db
-from jobs.news_update import run_news_update
+from internal_docs import disabled_docs_kwargs, mount_protected_docs
+from jobs.news_update import run_scheduled_news_update
 from models.jobs import HealthResponse
 from routers.articles_routes import router as articles_router
 from routers.jobs_routes import router as jobs_router
@@ -35,6 +36,9 @@ Summaries go through ``llm_provider_client`` (LiteLLM), not llm-service.
 News and agent endpoints require header:
 
 `X-Internal-Api-Key: <INTERNAL_API_KEY>`
+
+`/docs`, `/redoc`, and `/openapi.json` require the same key (header, HTTP Basic
+password, or `?api_key=`). They are not public.
 
 ## Swagger abilities
 1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
@@ -69,7 +73,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     news_cron = os.getenv("NEWS_CRON", "0 * * * *")
 
     scheduler.add_job(
-        run_news_update,
+        run_scheduled_news_update,
         trigger=_parse_cron(news_cron, tz),
         id="news_update",
         replace_existing=True,
@@ -88,10 +92,7 @@ app = FastAPI(
     description=API_DESCRIPTION,
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    swagger_ui_parameters={"persistAuthorization": True},
+    **disabled_docs_kwargs(),
     openapi_tags=[
         {
             "name": "News",
@@ -120,6 +121,7 @@ app = FastAPI(
 app.include_router(news_router)
 app.include_router(articles_router)
 app.include_router(jobs_router)
+mount_protected_docs(app)
 
 
 @app.api_route(

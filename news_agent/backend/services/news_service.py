@@ -8,9 +8,11 @@ from fastapi import HTTPException, status
 from constant import (
     ARTICLE_RETENTION_DAYS,
     NEWS_SEARCH_MAX_CHARS,
+    NEWS_SEARCH_MAX_QUERY_CHARS,
     NEWS_SEARCH_SYSTEM_PROMPT,
 )
 from db_logics import articles_db_logic as articles_db
+from llm_guard import guarded_user_message
 from llm_provider_client import LLMProviderClient
 from models.news import NewsArticle, SearchAndSummarizeResponse, StockNewsResponse
 from news_provider_client import NewsProviderClient
@@ -91,7 +93,7 @@ def _join_articles(bodies: list[str]) -> str:
 async def search_and_summarize(symbol: str, query: str) -> SearchAndSummarizeResponse:
     """Answer a question using stored article bodies from the last 7 days."""
     ticker: str = symbol.strip().upper()
-    question: str = query.strip()
+    question: str = query.strip()[:NEWS_SEARCH_MAX_QUERY_CHARS]
     if not ticker:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "symbol must not be empty")
     if not question:
@@ -119,10 +121,10 @@ async def search_and_summarize(symbol: str, query: str) -> SearchAndSummarizeRes
     if not corpus:
         return empty
 
-    user_message = (
-        f"Ticker: {ticker}\n"
-        f"User query: {question}\n\n"
-        f"News articles:\n{corpus}"
+    user_message = guarded_user_message(
+        f"Ticker: {ticker}\nAnswer the question using only the news articles.",
+        ("USER_QUESTION", question),
+        ("NEWS_ARTICLES", corpus),
     )
     try:
         llm = _llm_client()

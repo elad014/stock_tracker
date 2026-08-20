@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+from llm_guard.prompt import wrap_untrusted
+
+__all__ = ["LLMCompletionResult", "wrap_untrusted"]
+
 
 @dataclass
 class LLMCompletionResult:

@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from constant import ARTICLE_RETENTION_DAYS
+from llm_limits import news_update_guard
 from llm_provider_client import LLMProviderClient
 from news_provider_client import NewsItem, NewsProviderClient
 from services.article_service import purge_old_articles, to_article_payload, upsert_stock_articles
@@ -137,3 +138,8 @@ async def run_news_update() -> None:
         await purge_old_articles(ARTICLE_RETENTION_DAYS)
     except Exception:
         logger.exception("Failed to purge articles older than %s days", ARTICLE_RETENTION_DAYS)
+
+
+async def run_scheduled_news_update() -> None:
+    """Cron entry: never cooldown-limited; skipped only if a run is already in progress."""
+    await news_update_guard.run_from_schedule(run_news_update)
