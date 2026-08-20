@@ -7,14 +7,16 @@ back to the summary supplied by the news provider.
 
 import logging
 from typing import Optional
+from urllib.parse import urljoin
 
 import requests
 import trafilatura
 
-from article_extractor_client.util import clean_text, truncate
+from article_extractor.util import clean_text, is_safe_article_url, truncate
 from constant import (
     ARTICLE_EXTRACT_MAX_BYTES,
     ARTICLE_EXTRACT_MAX_CHARS,
+    ARTICLE_EXTRACT_MAX_REDIRECTS,
     ARTICLE_EXTRACT_TIMEOUT_SECONDS,
     ARTICLE_EXTRACT_USER_AGENT,
 )
@@ -22,7 +24,7 @@ from constant import (
 logger = logging.getLogger(__name__)
 
 
-class ArticleExtractorClient:
+class ArticleExtractor:
     """Downloads an article page and extracts its main text."""
 
     def __init__(
@@ -45,33 +47,51 @@ class ArticleExtractorClient:
         }
 
     def _download(self, url: str) -> Optional[str]:
-        try:
-            with requests.get(
-                url,
-                headers=self._headers(),
-                timeout=self._timeout,
-                stream=True,
-            ) as response:
-                response.raise_for_status()
-                content_type = str(response.headers.get("Content-Type", "")).lower()
-                if content_type and "html" not in content_type:
-                    logger.info("Skipping non-HTML article %s (%s)", url, content_type)
-                    return None
-
-                chunks: list[bytes] = []
-                total = 0
-                for chunk in response.iter_content(chunk_size=8192):
-                    if not chunk:
+        current: str = url
+        for _ in range(ARTICLE_EXTRACT_MAX_REDIRECTS + 1):
+            if not is_safe_article_url(current):
+                logger.info("Blocked unsafe article URL %s", current)
+                return None
+            try:
+                with requests.get(
+                    current,
+                    headers=self._headers(),
+                    timeout=self._timeout,
+                    stream=True,
+                    allow_redirects=False,
+                ) as response:
+                    if 300 <= response.status_code < 400:
+                        location = str(response.headers.get("Location") or "").strip()
+                        if not location:
+                            return None
+                        current = urljoin(current, location)
                         continue
-                    chunks.append(chunk)
-                    total += len(chunk)
-                    if total >= self._max_bytes:
-                        break
-                encoding = response.encoding or "utf-8"
-                return b"".join(chunks).decode(encoding, errors="replace")
-        except requests.RequestException as exc:
-            logger.info("Article download failed for %s: %s", url, exc)
-            return None
+                    response.raise_for_status()
+                    content_type = str(response.headers.get("Content-Type", "")).lower()
+                    if content_type and "html" not in content_type:
+                        logger.info(
+                            "Skipping non-HTML article %s (%s)",
+                            current,
+                            content_type,
+                        )
+                        return None
+
+                    chunks: list[bytes] = []
+                    total = 0
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if not chunk:
+                            continue
+                        chunks.append(chunk)
+                        total += len(chunk)
+                        if total >= self._max_bytes:
+                            break
+                    encoding = response.encoding or "utf-8"
+                    return b"".join(chunks).decode(encoding, errors="replace")
+            except requests.RequestException as exc:
+                logger.info("Article download failed for %s: %s", current, exc)
+                return None
+        logger.info("Too many redirects for article URL %s", url)
+        return None
 
     def extract(self, url: str) -> Optional[str]:
         """Return readable article text, or None when it cannot be extracted."""

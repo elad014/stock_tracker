@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from database_client import db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
+from job_limits import daily_update_guard
 from services.stock_service import (
     _fetch_history_gap_best_effort,
     _provider,
@@ -94,3 +95,8 @@ async def run_daily_update(*, force: bool = False) -> None:
         except Exception as exc:
             logger.exception("Daily update failed for %s: %s", symbol, exc)
             continue
+
+
+async def run_scheduled_daily_update() -> None:
+    """Cron entry: never cooldown-limited; skipped only if a run is already in progress."""
+    await daily_update_guard.run_from_schedule(run_daily_update)

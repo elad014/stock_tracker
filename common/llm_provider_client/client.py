@@ -21,7 +21,8 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from litellm import acompletion
 
-from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS
+from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS, NEWS_SUMMARIZE_SYSTEM_PROMPT
+from llm_guard import guarded_user_message
 from llm_provider_client.util import LLMCompletionResult
 
 load_dotenv()
@@ -179,21 +180,22 @@ class LLMProviderClient:
         ticker = symbol.strip().upper() if symbol else None
         quote_block = self._format_quote_context(close, change, percent_change)
         subject = f" about {ticker}" if ticker else ""
-        prompt = (
-            f"You are helping an investor review financial news{subject}.\n"
-            f"{quote_block}"
-            "Using the articles below, respond with:\n"
-            "1) A short news summary in 2-4 clear sentences.\n"
-            "2) A final line exactly in the form: Outlook: UP|DOWN|NEUTRAL\n"
-            "Choose the outlook from the news tone and the current quote state.\n\n"
-            f"{cleaned}"
+        user_message = guarded_user_message(
+            (
+                f"Summarize the following financial news{subject}.\n"
+                f"{quote_block}"
+                "Respond with a 2-4 sentence summary and a final line "
+                "exactly in the form: Outlook: UP|DOWN|NEUTRAL"
+            ),
+            ("NEWS_SOURCE_TEXT", cleaned),
         )
-
-        messages: list[dict[str, str]] = []
-        system_prompt = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": NEWS_SUMMARIZE_SYSTEM_PROMPT},
+        ]
+        extra_system = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
+        if extra_system:
+            messages.append({"role": "system", "content": extra_system})
+        messages.append({"role": "user", "content": user_message})
 
         resolved_max = (
             max_tokens if max_tokens is not None else self._default_max_tokens()

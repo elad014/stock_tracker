@@ -56,6 +56,7 @@ services:
       - ./news_agent/backend/.env
     volumes:
       - ./common:/app/common
+      - ./news_agent/backend:/app/backend
     environment:
       - PYTHONPATH=/app/common:/app/backend
       - STOCK_MANAGER_URL=http://stock-manager:8001

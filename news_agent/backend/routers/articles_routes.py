@@ -61,7 +61,10 @@ async def sync_stock_articles(
         "and stores `ai_summary` plus `text`. Concurrent callers get status=pending."
     ),
     response_model=ArticleSummaryResponse,
-    responses={404: {"description": "Article not found"}},
+    responses={
+        404: {"description": "Article not found"},
+        429: {"description": "Too many new LLM summaries in the current minute"},
+    },
 )
 async def summarize_article(
     article_id: str = Path(..., description="Article UUID"),

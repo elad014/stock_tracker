@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 
 import type { StockArticle } from "../../models/stocks";
@@ -100,9 +101,13 @@ export default function StockNewsArticles({
       if (result.ai_summary_status === "pending") {
         await pollUntilReady(articleId);
       }
-    } catch {
+    } catch (err: unknown) {
       if (!cancelledRef.current) {
-        setError("Failed to summarize the article");
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          setError("Too many summaries right now. Please try again in a minute.");
+        } else {
+          setError("Failed to summarize the article");
+        }
       }
     } finally {
       if (!cancelledRef.current) {

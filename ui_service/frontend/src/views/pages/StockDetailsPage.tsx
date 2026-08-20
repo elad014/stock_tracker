@@ -67,6 +67,8 @@ export default function StockDetailsPage(): JSX.Element {
         }
         if (status === 404) {
           setStockError("Stock not found");
+        } else if (status === 403) {
+          setStockError("This stock is not on your watchlist");
         } else {
           setStockError(formatApiError(err, "Failed to load stock details"));
         }

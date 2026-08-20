@@ -31,6 +31,13 @@ from models.auth import (
     UpdateSettingsRequest,
     UpdateSettingsResponse,
 )
+from ui_utils.rate_limit import (
+    login_by_email,
+    login_by_ip,
+    register_by_ip,
+    reset_by_email,
+    reset_by_ip,
+)
 
 load_dotenv()
 
@@ -40,6 +47,8 @@ JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 RESET_TOKEN_EXPIRE_MINUTES = 15
+_DUMMY_PASSWORD_HASH: str = bcrypt.hashpw(b"timing-dummy", bcrypt.gensalt()).decode()
+_RESET_ACCEPTED: str = "If the email exists, a reset link has been sent"
 
 
 def hash_password(password: str) -> str:
@@ -56,7 +65,10 @@ def create_token(data: dict[str, Any], expires_minutes: int) -> str:
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def register(req: RegisterRequest) -> RegisterResponse:
+async def register(req: RegisterRequest, client_ip: str) -> RegisterResponse:
+    register_by_ip.assert_allowed(client_ip)
+    register_by_ip.record(client_ip)
+
     if await get_user_by_email(req.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
 
@@ -198,9 +210,21 @@ async def update_me(
     )
 
 
-async def login(req: LoginRequest) -> Token:
+async def login(req: LoginRequest, client_ip: str) -> Token:
+    email_key: str = req.email.strip().lower()
+    login_by_email.assert_allowed(email_key)
+    login_by_ip.assert_allowed(client_ip)
+
     user = await get_user_by_email(req.email)
-    if not user or not verify_password(req.password, user["password"]):
+    password_hash: str = user["password"] if user else _DUMMY_PASSWORD_HASH
+    try:
+        password_ok: bool = verify_password(req.password, password_hash)
+    except (ValueError, TypeError):
+        password_ok = False
+
+    if not user or not password_ok:
+        login_by_email.record(email_key)
+        login_by_ip.record(client_ip)
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Invalid email or password",
@@ -208,11 +232,14 @@ async def login(req: LoginRequest) -> Token:
         )
 
     if is_user_locked(user.get("lock")):
+        login_by_email.record(email_key)
+        login_by_ip.record(client_ip)
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Account is locked",
         )
 
+    login_by_email.reset(email_key)
     access_token = create_token(
         {"sub": user["email"], "user_id": str(user["id"])},
         ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -220,25 +247,30 @@ async def login(req: LoginRequest) -> Token:
     return Token(access_token=access_token, token_type="bearer")
 
 
-async def password_reset_request(req: PasswordResetRequest) -> MessageResponse:
+async def password_reset_request(
+    req: PasswordResetRequest,
+    client_ip: str,
+) -> MessageResponse:
+    email_key: str = req.email.strip().lower()
+    reset_by_email.assert_allowed(email_key)
+    reset_by_ip.assert_allowed(client_ip)
+    reset_by_email.record(email_key)
+    reset_by_ip.record(client_ip)
+
     user = await get_user_by_email(req.email)
-    if not user:
-        logger.warning("User not found")
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User not found")
-    if user:
-        if is_user_locked(user.get("lock")):
-            logger.warning("User is locked")
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "User is locked")
-        token = create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
-        try:
-            await mailer.send_password_reset(to=user["email"], reset_token=token)
-        except (httpx.HTTPStatusError, httpx.RequestError):
-            logger.error("Failed to send password reset email to %s", req.email)
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "Email service is not available right now, please try again later",
-            )
-    return MessageResponse(message="If the email exists, a reset link has been sent")
+    if user is None:
+        logger.info("Password reset requested for unknown email")
+        return MessageResponse(message=_RESET_ACCEPTED)
+    if is_user_locked(user.get("lock")):
+        logger.info("Password reset requested for locked account")
+        return MessageResponse(message=_RESET_ACCEPTED)
+
+    token = create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
+    try:
+        await mailer.send_password_reset(to=user["email"], reset_token=token)
+    except (httpx.HTTPStatusError, httpx.RequestError):
+        logger.error("Failed to send password reset email to %s", req.email)
+    return MessageResponse(message=_RESET_ACCEPTED)
 
 
 async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:

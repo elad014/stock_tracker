@@ -1,5 +1,7 @@
 import os
 
+from llm_guard.prompt import compose_system_prompt
+
 # ---------------------------------------------------------------------------
 # Internal service URLs (inter-service HTTP calls)
 # ---------------------------------------------------------------------------
@@ -30,16 +32,34 @@ ARTICLE_EXTRACT_USER_AGENT = (
 ARTICLE_EXTRACT_TIMEOUT_SECONDS = 20.0
 ARTICLE_EXTRACT_MAX_BYTES = 2_000_000
 ARTICLE_EXTRACT_MAX_CHARS = 12_000
+ARTICLE_EXTRACT_MAX_REDIRECTS = 3
 
 # ---------------------------------------------------------------------------
 # News article retention (calendar days, inclusive)
 # ---------------------------------------------------------------------------
 ARTICLE_RETENTION_DAYS = 7
 NEWS_SEARCH_MAX_CHARS = 24_000
-NEWS_SEARCH_SYSTEM_PROMPT = (
-    "You are a financial news assistant. Answer the user's query based strictly "
-    "on the provided news articles. If the articles do not contain the answer, say so."
+NEWS_SEARCH_MAX_QUERY_CHARS = 1_000
+NEWS_SEARCH_SYSTEM_PROMPT = compose_system_prompt(
+    "You are a financial news assistant.",
+    "Answer the user's question using only the news articles. "
+    "If the articles do not contain the answer, say so.",
 )
+NEWS_SUMMARIZE_SYSTEM_PROMPT = compose_system_prompt(
+    "You are a financial news analyst.",
+    "Using only the untrusted source text and the quote figures provided outside "
+    "the blocks, respond with: "
+    "1) A short news summary in 2-4 clear sentences. "
+    "2) A final line exactly in the form: Outlook: UP|DOWN|NEUTRAL",
+)
+# Cap HTTP LLM triggers only. Cron news-update is not subject to the cooldown
+# and still summarizes every stock that has news.
+NEWS_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
+ARTICLE_SUMMARIZE_MAX_ATTEMPTS = 20
+ARTICLE_SUMMARIZE_WINDOW_SECONDS = 60
+# Stock-manager HTTP job triggers. Cron is not subject to these cooldowns.
+DAILY_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
+CLEANUP_ARCHIVE_HTTP_COOLDOWN_SECONDS = 15 * 60
 
 # ---------------------------------------------------------------------------
 # Object storage (Supabase Storage over the S3 protocol, or AWS S3)

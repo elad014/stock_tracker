@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from models.llm import HealthResponse
 from routers.llm_routes import router as llm_router
 
@@ -13,6 +14,9 @@ This service keeps stateful chat for the UI.
 Chat endpoints require header:
 
 `X-Internal-Api-Key: <INTERNAL_API_KEY>`
+
+`/docs`, `/redoc`, and `/openapi.json` require the same key (header, HTTP Basic
+password, or `?api_key=`). They are not public.
 
 ## Endpoints
 - `POST /chat` — stateful UI chat (last 20 messages per `user_id`)
@@ -30,10 +34,7 @@ app = FastAPI(
     title="LLM Service API",
     description=API_DESCRIPTION,
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    swagger_ui_parameters={"persistAuthorization": True},
+    **disabled_docs_kwargs(),
     openapi_tags=[
         {
             "name": "Chat",
@@ -46,6 +47,7 @@ app = FastAPI(
     ],
 )
 app.include_router(llm_router)
+mount_protected_docs(app)
 
 
 @app.api_route(

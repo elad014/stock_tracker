@@ -3,14 +3,14 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
-
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.responses import Response
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
 
 from database_client import db
 from object_storage_client import ObjectStorageError
@@ -76,14 +76,27 @@ app.include_router(stocks_router)
 app.include_router(admin_router)
 app.include_router(documents_router)
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_DIR = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
+
+
+def _frontend_file(relative_path: str) -> Path | None:
+    """Return a file under FRONTEND_DIR, or None if the path is missing or escapes."""
+    if not relative_path or relative_path.startswith(("/", "\\")):
+        return None
+    candidate = (FRONTEND_DIR / relative_path).resolve()
+    if not candidate.is_relative_to(FRONTEND_DIR):
+        return None
+    if candidate.is_file():
+        return candidate
+    return None
+
 
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
     @app.get("/{path:path}")
     async def serve_frontend(path: str) -> FileResponse:
-        file_path = FRONTEND_DIR / path
-        if file_path.exists() and file_path.is_file():
+        file_path = _frontend_file(path)
+        if file_path is not None:
             return FileResponse(file_path)
         return FileResponse(FRONTEND_DIR / "index.html")

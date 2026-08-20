@@ -1,5 +1,7 @@
 from typing import Any, Optional
 
+from fastapi import HTTPException, status
+
 from models.stocks import StockArticle, StockDetails, StockHistoryBar
 from news_agent_client import news_agent_client as news_agent
 from stock_manager_client import stock_manager_client as stock_manager
@@ -28,17 +30,30 @@ def _quote_to_stock_details(
     )
 
 
+async def _require_on_watchlist(user_id: str, stock_id: str) -> None:
+    if await stock_manager.is_on_watchlist(user_id, stock_id):
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Stock is not on your watchlist",
+    )
+
+
 async def get_stock_details(stock_id: str, user_id: str) -> StockDetails:
+    await _require_on_watchlist(user_id, stock_id)
     payload = await stock_manager.get_stock(stock_id)
-    on_watchlist = await stock_manager.is_on_watchlist(user_id, stock_id)
-    summary = payload.get("stock_summery") if on_watchlist else None
-    return _quote_to_stock_details(payload, stock_summery=summary)
+    return _quote_to_stock_details(
+        payload,
+        stock_summery=payload.get("stock_summery"),
+    )
 
 
 async def get_stock_history(
     stock_id: str,
+    user_id: str,
     range_key: str = "1Y",
 ) -> list[StockHistoryBar]:
+    await _require_on_watchlist(user_id, stock_id)
     rows = await stock_manager.get_stock_history(stock_id, range_key)
     return [StockHistoryBar(**row) for row in rows]
 
@@ -57,14 +72,23 @@ def _to_article(payload: dict[str, Any]) -> StockArticle:
     )
 
 
-async def list_stock_articles(stock_id: str, limit: int = 100) -> list[StockArticle]:
+async def list_stock_articles(
+    stock_id: str,
+    user_id: str,
+    limit: int = 100,
+) -> list[StockArticle]:
     """Read-only: articles are filled by news-agent cron / Swagger, never by the user."""
+    await _require_on_watchlist(user_id, stock_id)
     rows = await news_agent.list_stock_articles(stock_id, limit)
     return [_to_article(row) for row in rows]
 
 
-async def summarize_stock_article(stock_id: str, article_id: str) -> StockArticle:
-    _ = stock_id
+async def summarize_stock_article(
+    stock_id: str,
+    article_id: str,
+    user_id: str,
+) -> StockArticle:
+    await _require_on_watchlist(user_id, stock_id)
     result = await news_agent.summarize_article(article_id)
     return StockArticle(
         article_id=str(result.get("article_id")),
