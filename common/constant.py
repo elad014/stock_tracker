@@ -8,6 +8,7 @@ from llm_guard.prompt import compose_system_prompt
 STOCK_MANAGER_URL = os.getenv("STOCK_MANAGER_URL", "http://localhost:8001").rstrip("/")
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002").rstrip("/")
 NEWS_AGENT_URL = os.getenv("NEWS_AGENT_URL", "http://localhost:8003").rstrip("/")
+DOC_AGENT_URL = os.getenv("DOC_AGENT_URL", "http://localhost:8004").rstrip("/")
 
 # ---------------------------------------------------------------------------
 # Internal auth (service-to-service API key)
@@ -111,3 +112,44 @@ DEPRECATED_GEMINI_MODELS = {
     "gemini/gemini-2.0-flash",
     "gemini/gemini-2.0-flash-lite",
 }
+
+# ---------------------------------------------------------------------------
+# Doc agent (RAG over user documents)
+#
+# The embedding model decides the vector width, and the width is baked into the
+# document_vectors column, so a model swap means a re-index. Defaults match the
+# rest of the stack (Gemini / GEMINI_API_KEY). dimensions=1536 is passed on
+# every embed call so Gemini Matryoshka output matches the column.
+# ---------------------------------------------------------------------------
+DEFAULT_EMBEDDING_MODEL = "gemini/gemini-embedding-001"
+EMBEDDING_MODEL = (
+    os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL).strip()
+    or DEFAULT_EMBEDDING_MODEL
+)
+EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_BATCH_SIZE = 16
+DOC_CHAT_MODEL = (
+    os.getenv("DOC_CHAT_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+)
+
+DOC_CHUNK_CHARS = 1_200
+DOC_CHUNK_OVERLAP = 200
+DOC_MAX_CHUNKS = 400
+DOC_MAX_DOCUMENT_CHARS = 400_000
+DOC_TOP_K = 5
+DOC_MAX_QUERY_CHARS = 1_000
+DOC_CONTEXT_MAX_CHARS = 12_000
+
+DOC_RAG_SYSTEM_PROMPT = compose_system_prompt(
+    "You are an accurate document assistant.",
+    "Answer the user's query based STRICTLY on the provided document excerpts. "
+    "Do not hallucinate or use outside knowledge. If the answer is not in the "
+    "excerpts, state that clearly.",
+)
+DOC_NOT_FOUND_ANSWER = "Document not found or no relevant information."
+
+# Ingestion embeds a whole document, so it is capped far tighter than asking.
+DOC_INGEST_MAX_ATTEMPTS = 5
+DOC_INGEST_WINDOW_SECONDS = 60
+DOC_ASK_MAX_ATTEMPTS = 20
+DOC_ASK_WINDOW_SECONDS = 60

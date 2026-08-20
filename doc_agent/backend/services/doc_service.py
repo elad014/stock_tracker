@@ -1,0 +1,279 @@
+import asyncio
+import logging
+import os
+
+from fastapi import HTTPException, status
+
+from constant import (
+    DOC_CHAT_MODEL,
+    DOC_CHUNK_CHARS,
+    DOC_CHUNK_OVERLAP,
+    DOC_CONTEXT_MAX_CHARS,
+    DOC_MAX_DOCUMENT_CHARS,
+    DOC_MAX_QUERY_CHARS,
+    DOC_NOT_FOUND_ANSWER,
+    DOC_RAG_SYSTEM_PROMPT,
+    DOC_TOP_K,
+)
+from database_client import db
+from db_logics import vectors_db_logic as vectors_db
+from embedding_client import EmbeddingClient
+from llm_guard import guarded_user_message
+from llm_limits import ask_limiter, ingest_limiter
+from llm_provider_client import LLMProviderClient
+from models.docs import AskResponse, DeleteVectorsResponse, IngestResponse
+from object_storage_client import ObjectStorageClient, ObjectStorageError, is_placeholder_key
+from object_storage_client.util import normalize_key
+from services.chunker import chunk_text
+from services.pdf_extractor import PdfExtractError, extract_pdf_text
+
+logger = logging.getLogger(__name__)
+
+BUCKET: str = os.getenv("S3_BUCKET_USER_DOCUMENTS", "users_personal_documents")
+storage = ObjectStorageClient(bucket=BUCKET)
+
+
+def _embedding_client() -> EmbeddingClient:
+    return EmbeddingClient()
+
+
+def _llm_client() -> LLMProviderClient:
+    return LLMProviderClient(model=DOC_CHAT_MODEL)
+
+
+def _normalize_document_id(document_id: str) -> str:
+    relative = document_id.strip().replace("\\", "/").lstrip("/")
+    if not relative:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "document_id must not be empty")
+    return relative
+
+
+def document_storage_key(user_id: str, document_id: str) -> tuple[str, str]:
+    """Build the tenant-scoped S3 key and the stored document_id."""
+    uid = user_id.strip()
+    if not uid or "/" in uid or "\\" in uid or uid in {".", ".."}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user_id")
+
+    relative = _normalize_document_id(document_id)
+    try:
+        key = normalize_key(f"{uid}/{relative}")
+    except ObjectStorageError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid document path") from exc
+
+    prefix = f"{uid}/"
+    if not key.startswith(prefix) or key == uid:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid document path")
+    if is_placeholder_key(key):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid document path")
+    return key, key[len(prefix) :]
+
+
+async def resolve_document_key(
+    user_id: str,
+    document_id: str,
+    *,
+    require_object: bool,
+) -> tuple[str, str]:
+    """Resolve a document path to the real S3 key, ignoring filename case."""
+    key, stored_id = document_storage_key(user_id, document_id)
+    uid = user_id.strip()
+    prefix = f"{uid}/"
+    try:
+        if await storage.exists(key):
+            return key, stored_id
+        objects = await storage.list_objects(prefix)
+    except ObjectStorageError as exc:
+        logger.exception("Failed to stat document %s", key)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to reach document storage",
+        ) from exc
+
+    target = stored_id.casefold()
+    matches: list[str] = []
+    for obj in objects:
+        if is_placeholder_key(obj.key):
+            continue
+        relative = obj.key[len(prefix) :] if obj.key.startswith(prefix) else obj.key
+        if relative.casefold() == target:
+            matches.append(relative)
+
+    if len(matches) == 1:
+        resolved = matches[0]
+        return f"{prefix}{resolved}", resolved
+    if len(matches) > 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Document path is ambiguous",
+        )
+    if require_object:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return key, stored_id
+
+
+def _join_chunks(contents: list[str]) -> str:
+    joined = "\n\n---\n\n".join(item.strip() for item in contents if item.strip())
+    if len(joined) <= DOC_CONTEXT_MAX_CHARS:
+        return joined
+    return joined[:DOC_CONTEXT_MAX_CHARS]
+
+
+async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
+    """Download a user's PDF, embed its chunks, and replace stored vectors."""
+    key, stored_id = await resolve_document_key(
+        user_id,
+        document_id,
+        require_object=True,
+    )
+    ingest_limiter.consume(user_id.strip())
+
+    try:
+        pdf_bytes = await storage.download_bytes(key)
+    except ObjectStorageError as exc:
+        logger.exception("Failed to download document %s", key)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to download document",
+        ) from exc
+
+    try:
+        text = await asyncio.to_thread(extract_pdf_text, pdf_bytes)
+    except PdfExtractError as exc:
+        message = str(exc)
+        if message == "PDF contains no extractable text":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, message) from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, message) from exc
+
+    if len(text) > DOC_MAX_DOCUMENT_CHARS:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            "Document text is too large to index",
+        )
+
+    chunks = chunk_text(text, DOC_CHUNK_CHARS, DOC_CHUNK_OVERLAP)
+    if not chunks:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "PDF contains no extractable text",
+        )
+
+    try:
+        embeddings = await _embedding_client().embed_texts(chunks)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Embedding failed for %s", key)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    rows: list[tuple[int, str, list[float]]] = [
+        (index, content, vector)
+        for index, (content, vector) in enumerate(zip(chunks, embeddings))
+    ]
+    try:
+        async with db.transaction() as conn:
+            await vectors_db.delete_document_vectors(user_id.strip(), stored_id, conn=conn)
+            await vectors_db.insert_chunks(user_id.strip(), stored_id, rows, conn=conn)
+    except Exception as exc:
+        logger.exception("Failed to store vectors for %s", key)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to store document vectors",
+        ) from exc
+
+    return IngestResponse(
+        user_id=user_id.strip(),
+        document_id=stored_id,
+        chunk_count=len(rows),
+    )
+
+
+async def ask_document(query: str, user_id: str, document_id: str) -> AskResponse:
+    """Answer a question using only chunks from that user's document."""
+    uid = user_id.strip()
+    question = query.strip()[:DOC_MAX_QUERY_CHARS]
+    if not uid:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id must not be empty")
+    if not question:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "query must not be empty")
+
+    _key, stored_id = await resolve_document_key(
+        uid,
+        document_id,
+        require_object=False,
+    )
+    ask_limiter.consume(uid)
+
+    try:
+        query_vector = await _embedding_client().embed_query(question)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Query embedding failed for %s / %s", uid, stored_id)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    try:
+        matches = await vectors_db.search_similar(
+            query_vector,
+            uid,
+            stored_id,
+            limit=DOC_TOP_K,
+        )
+    except Exception as exc:
+        logger.exception("Vector search failed for %s / %s", uid, stored_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to search document vectors",
+        ) from exc
+
+    contents = [str(row.get("content") or "") for row in matches]
+    corpus = _join_chunks(contents)
+    if not corpus:
+        return AskResponse(answer=DOC_NOT_FOUND_ANSWER)
+
+    user_message = guarded_user_message(
+        "Answer the query using only the document excerpts.",
+        ("USER_QUERY", question),
+        ("DOCUMENT_EXCERPTS", corpus),
+    )
+    try:
+        llm = _llm_client()
+        result = await llm.chat_completion(
+            [
+                {"role": "system", "content": DOC_RAG_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=llm._default_max_tokens(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Doc RAG LLM failed for %s / %s", uid, stored_id)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    answer = result.content.strip()
+    if not answer:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "LLM returned an empty answer")
+    return AskResponse(answer=answer)
+
+
+async def delete_document_vectors(user_id: str, document_id: str) -> DeleteVectorsResponse:
+    """Drop stored vectors for a document after the PDF is removed."""
+    uid = user_id.strip()
+    _key, stored_id = await resolve_document_key(
+        uid,
+        document_id,
+        require_object=False,
+    )
+    try:
+        deleted = await vectors_db.delete_document_vectors(uid, stored_id)
+    except Exception as exc:
+        logger.exception("Failed to delete vectors for %s / %s", uid, stored_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to delete document vectors",
+        ) from exc
+    return DeleteVectorsResponse(
+        user_id=uid,
+        document_id=stored_id,
+        deleted_chunks=deleted,
+    )
