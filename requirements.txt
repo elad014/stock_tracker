@@ -12,4 +12,4 @@ apscheduler
 litellm
 trafilatura
 boto3
-pypdf
+pymupdf4llm

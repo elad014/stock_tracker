@@ -26,15 +26,14 @@ router = APIRouter(
     tags=["Documents"],
     summary="Ingest a stored PDF into the vector index",
     description=(
-        "Downloads `{user_id}/{document_id}` from object storage, splits the PDF "
-        "text into overlapping chunks, embeds each chunk, and replaces any "
-        "existing vectors for that tenant document."
+        "Downloads `{user_id}/{document_id}` from object storage, extracts "
+        "markdown (tables kept intact), chunks the full document with section "
+        "metadata, embeds each chunk, and replaces stored vectors."
     ),
     response_model=IngestResponse,
     responses={
         400: {"description": "Invalid user_id, document path, or PDF"},
         404: {"description": "Document missing in storage or no extractable text"},
-        413: {"description": "Document text exceeds the index limit"},
     },
 )
 async def upload_document(req: IngestRequest) -> IngestResponse:

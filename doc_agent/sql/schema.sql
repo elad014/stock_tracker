@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS document_vectors (
     document_id VARCHAR NOT NULL,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(768),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

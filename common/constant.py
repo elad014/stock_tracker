@@ -118,7 +118,7 @@ DEPRECATED_GEMINI_MODELS = {
 #
 # The embedding model decides the vector width, and the width is baked into the
 # document_vectors column, so a model swap means a re-index. Defaults match the
-# rest of the stack (Gemini / GEMINI_API_KEY). dimensions=1536 is passed on
+# rest of the stack (Gemini / GEMINI_API_KEY). dimensions=768 is passed on
 # every embed call so Gemini Matryoshka output matches the column.
 # ---------------------------------------------------------------------------
 DEFAULT_EMBEDDING_MODEL = "gemini/gemini-embedding-001"
@@ -126,7 +126,7 @@ EMBEDDING_MODEL = (
     os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL).strip()
     or DEFAULT_EMBEDDING_MODEL
 )
-EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_DIMENSIONS = 768
 EMBEDDING_BATCH_SIZE = 16
 DOC_CHAT_MODEL = (
     os.getenv("DOC_CHAT_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
@@ -134,8 +134,8 @@ DOC_CHAT_MODEL = (
 
 DOC_CHUNK_CHARS = 1_200
 DOC_CHUNK_OVERLAP = 200
-DOC_MAX_CHUNKS = 400
-DOC_MAX_DOCUMENT_CHARS = 400_000
+DOC_TABLE_MAX_CHARS = 4_000
+DOC_DEFAULT_SECTION = "Introduction"
 DOC_TOP_K = 5
 DOC_MAX_QUERY_CHARS = 1_000
 DOC_CONTEXT_MAX_CHARS = 12_000

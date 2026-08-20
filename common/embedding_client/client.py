@@ -2,7 +2,7 @@
 
 Environment variables:
 - ``EMBEDDING_MODEL`` — LiteLLM embedding model id
-  (default: ``gemini/gemini-embedding-001``)
+  (default: ``gemini/gemini-embedding-001``, 768 dimensions)
 - ``GEMINI_API_KEY`` — required for the default Gemini embedding model
 """
 

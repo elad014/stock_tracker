@@ -9,7 +9,6 @@ from constant import (
     DOC_CHUNK_CHARS,
     DOC_CHUNK_OVERLAP,
     DOC_CONTEXT_MAX_CHARS,
-    DOC_MAX_DOCUMENT_CHARS,
     DOC_MAX_QUERY_CHARS,
     DOC_NOT_FOUND_ANSWER,
     DOC_RAG_SYSTEM_PROMPT,
@@ -24,8 +23,8 @@ from llm_provider_client import LLMProviderClient
 from models.docs import AskResponse, DeleteVectorsResponse, IngestResponse
 from object_storage_client import ObjectStorageClient, ObjectStorageError, is_placeholder_key
 from object_storage_client.util import normalize_key
-from services.chunker import chunk_text
-from services.pdf_extractor import PdfExtractError, extract_pdf_text
+from services.chunker import chunk_extracted_document
+from services.pdf_extractor import PdfExtractError, extract_pdf_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -137,20 +136,20 @@ async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
         ) from exc
 
     try:
-        text = await asyncio.to_thread(extract_pdf_text, pdf_bytes)
+        blocks = await asyncio.to_thread(extract_pdf_blocks, pdf_bytes)
     except PdfExtractError as exc:
         message = str(exc)
         if message == "PDF contains no extractable text":
             raise HTTPException(status.HTTP_404_NOT_FOUND, message) from exc
         raise HTTPException(status.HTTP_400_BAD_REQUEST, message) from exc
 
-    if len(text) > DOC_MAX_DOCUMENT_CHARS:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            "Document text is too large to index",
-        )
-
-    chunks = chunk_text(text, DOC_CHUNK_CHARS, DOC_CHUNK_OVERLAP)
+    document_name = stored_id.rsplit("/", 1)[-1]
+    chunks = chunk_extracted_document(
+        blocks,
+        document_name,
+        DOC_CHUNK_CHARS,
+        DOC_CHUNK_OVERLAP,
+    )
     if not chunks:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
