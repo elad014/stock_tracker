@@ -148,7 +148,13 @@ DOC_RAG_SYSTEM_PROMPT = compose_system_prompt(
 )
 DOC_NOT_FOUND_ANSWER = "Document not found or no relevant information."
 
-# Ingestion embeds a whole document, so it is capped far tighter than asking.
+# 10 is live S3 inventory. Weekly events stay after delete so re-upload
+# cannot reset embedding spend.
+DOC_MAX_INDEXED_FILES = 10
+DOC_MAX_INGESTS_PER_WEEK = 20
+DOC_INGEST_WEEK_DAYS = 7
+
+# Burst cap on HTTP ingest/ask.
 DOC_INGEST_MAX_ATTEMPTS = 5
 DOC_INGEST_WINDOW_SECONDS = 60
 DOC_ASK_MAX_ATTEMPTS = 20

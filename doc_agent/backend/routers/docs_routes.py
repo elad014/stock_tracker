@@ -14,7 +14,7 @@ router = APIRouter(
     dependencies=[Depends(verify_internal_api_key)],
     responses={
         401: {"description": "Missing or invalid X-Internal-Api-Key"},
-        429: {"description": "LLM rate limit exceeded"},
+        429: {"description": "LLM rate limit or weekly ingest cap exceeded"},
         500: {"description": "INTERNAL_API_KEY or model configuration missing"},
         502: {"description": "Upstream storage, embedding, or LLM request failed"},
     },
@@ -28,12 +28,16 @@ router = APIRouter(
     description=(
         "Downloads `{user_id}/{document_id}` from object storage, extracts "
         "markdown (tables kept intact), chunks the full document with section "
-        "metadata, embeds each chunk, and replaces stored vectors."
+        "metadata, embeds each chunk, and replaces stored vectors. "
+        "Each user may store 10 files in object storage at a time and "
+        "20 ingests per week."
     ),
     response_model=IngestResponse,
     responses={
         400: {"description": "Invalid user_id, document path, or PDF"},
         404: {"description": "Document missing in storage or no extractable text"},
+        409: {"description": "More than 10 files already stored in S3"},
+        429: {"description": "Weekly ingest limit of 20 reached"},
     },
 )
 async def upload_document(req: IngestRequest) -> IngestResponse:

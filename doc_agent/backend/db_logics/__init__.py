@@ -1,3 +1,3 @@
-from db_logics import schema_init, vectors_db_logic
+from db_logics import ingest_events_db_logic, schema_init, vectors_db_logic
 
-__all__ = ["schema_init", "vectors_db_logic"]
+__all__ = ["ingest_events_db_logic", "schema_init", "vectors_db_logic"]
