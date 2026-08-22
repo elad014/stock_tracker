@@ -2,9 +2,10 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from services.auth_service import hash_password
+import services.documents_service as documents_service
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
+from doc_agent_client import doc_agent_client as doc_agent
 from models.admin import (
     AdminCreateUserRequest,
     AdminSetPasswordRequest,
@@ -15,6 +16,7 @@ from models.admin import (
 )
 from models.auth import MessageResponse
 from models.watchlist import WatchlistStock
+from services.auth_service import hash_password
 from stock_manager_client import stock_manager_client as stock_manager
 
 
@@ -132,6 +134,8 @@ async def delete_user(user_id: str) -> MessageResponse:
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
+    await documents_service.delete_all_user_files(user_id)
+    await doc_agent.purge_user(user_id)
     await stock_manager.clear_user_watchlist(user_id)
     result = await user_db.delete_user(user_id)
     if result == "DELETE 0":

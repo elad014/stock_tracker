@@ -37,6 +37,8 @@ password, or `?api_key=`). They are not public.
    from object storage, embed chunks, replace stored vectors
 2. **Ask** — `POST /api/v1/docs/ask`: tenant-scoped RAG over one document
 3. **Cleanup** — `DELETE /api/v1/docs/vectors`: drop vectors when a PDF is removed
+4. **Purge user** — `DELETE /api/v1/docs/users/{user_id}`: drop all vectors and
+   the ingest quota row when an account is deleted
 """
 
 
