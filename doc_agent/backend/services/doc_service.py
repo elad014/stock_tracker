@@ -9,12 +9,15 @@ from constant import (
     DOC_CHUNK_CHARS,
     DOC_CHUNK_OVERLAP,
     DOC_CONTEXT_MAX_CHARS,
+    DOC_MAX_INDEXED_FILES,
+    DOC_MAX_INGESTS_PER_WEEK,
     DOC_MAX_QUERY_CHARS,
     DOC_NOT_FOUND_ANSWER,
     DOC_RAG_SYSTEM_PROMPT,
     DOC_TOP_K,
 )
 from database_client import db
+from db_logics import ingest_events_db_logic as ingest_events_db
 from db_logics import vectors_db_logic as vectors_db
 from embedding_client import EmbeddingClient
 from llm_guard import guarded_user_message
@@ -117,6 +120,54 @@ def _join_chunks(contents: list[str]) -> str:
     return joined[:DOC_CONTEXT_MAX_CHARS]
 
 
+async def _count_user_s3_files(user_id: str) -> int:
+    """How many real files the user currently has in object storage."""
+    try:
+        objects = await storage.list_objects(f"{user_id}/")
+    except ObjectStorageError as exc:
+        logger.exception("Failed to list documents for %s", user_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to reach document storage",
+        ) from exc
+    return len(objects)
+
+
+async def _assert_ingest_quotas(user_id: str) -> None:
+    """Reject ingest when S3 is over 10 files or the weekly quota row is at 20."""
+    stored_files = await _count_user_s3_files(user_id)
+    if stored_files > DOC_MAX_INDEXED_FILES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            (
+                f"Document limit reached. You can index up to "
+                f"{DOC_MAX_INDEXED_FILES} documents at a time."
+            ),
+        )
+
+    try:
+        weekly, first_ingest = await ingest_events_db.current_period_usage(
+            user_id
+        )
+    except Exception as exc:
+        logger.exception("Failed to read weekly ingest quota for %s", user_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to check document ingest limits",
+        ) from exc
+
+    if weekly >= DOC_MAX_INGESTS_PER_WEEK:
+        retry_after = ingest_events_db.retry_after_seconds(first_ingest)
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            (
+                f"Weekly ingest limit reached. You can ingest up to "
+                f"{DOC_MAX_INGESTS_PER_WEEK} documents per week."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
     """Download a user's PDF, embed its chunks, and replace stored vectors."""
     key, stored_id = await resolve_document_key(
@@ -124,7 +175,9 @@ async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
         document_id,
         require_object=True,
     )
-    ingest_limiter.consume(user_id.strip())
+    uid = user_id.strip()
+    await _assert_ingest_quotas(uid)
+    ingest_limiter.consume(uid)
 
     try:
         pdf_bytes = await storage.download_bytes(key)
@@ -170,8 +223,9 @@ async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
     ]
     try:
         async with db.transaction() as conn:
-            await vectors_db.delete_document_vectors(user_id.strip(), stored_id, conn=conn)
-            await vectors_db.insert_chunks(user_id.strip(), stored_id, rows, conn=conn)
+            await vectors_db.delete_document_vectors(uid, stored_id, conn=conn)
+            await vectors_db.insert_chunks(uid, stored_id, rows, conn=conn)
+            await ingest_events_db.record_successful_ingest(uid, conn=conn)
     except Exception as exc:
         logger.exception("Failed to store vectors for %s", key)
         raise HTTPException(
@@ -180,7 +234,7 @@ async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
         ) from exc
 
     return IngestResponse(
-        user_id=user_id.strip(),
+        user_id=uid,
         document_id=stored_id,
         chunk_count=len(rows),
     )

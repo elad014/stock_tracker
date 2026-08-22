@@ -16,3 +16,11 @@ CREATE TABLE IF NOT EXISTS document_vectors (
 
 CREATE INDEX IF NOT EXISTS idx_doc_vectors_user_doc ON document_vectors (user_id, document_id);
 CREATE INDEX IF NOT EXISTS idx_doc_vectors_embedding ON document_vectors USING hnsw (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS document_ingest_quota (
+    user_id VARCHAR PRIMARY KEY,
+    count_recent_ingests INTEGER NOT NULL,
+    first_ingest TIMESTAMPTZ NOT NULL
+);
+
+DROP TABLE IF EXISTS document_ingest_events;

@@ -57,6 +57,39 @@ async def _ensure_embedding_width() -> None:
     )
 
 
+async def _quota_columns() -> set[str]:
+    rows = await db.fetch_all(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'document_ingest_quota'
+        """
+    )
+    return {str(row["column_name"]) for row in rows}
+
+
+async def _ensure_ingest_quota_table() -> None:
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_ingest_quota (
+            user_id VARCHAR PRIMARY KEY,
+            count_recent_ingests INTEGER NOT NULL,
+            first_ingest TIMESTAMPTZ NOT NULL
+        )
+        """
+    )
+    columns = await _quota_columns()
+    if "period_started_at" in columns and "first_ingest" not in columns:
+        await db.execute(
+            "ALTER TABLE document_ingest_quota RENAME COLUMN period_started_at TO first_ingest"
+        )
+    if "ingest_count" in columns and "count_recent_ingests" not in columns:
+        await db.execute(
+            "ALTER TABLE document_ingest_quota RENAME COLUMN ingest_count TO count_recent_ingests"
+        )
+
+
 async def ensure_vector_schema() -> None:
     """Create the vector extension, table, and indexes if they are missing."""
     try:
@@ -75,6 +108,8 @@ async def ensure_vector_schema() -> None:
                 ON document_vectors USING hnsw (embedding vector_cosine_ops)
             """
         )
+        await db.execute("DROP TABLE IF EXISTS document_ingest_events")
+        await _ensure_ingest_quota_table()
     except Exception:
         logger.exception("Failed to initialize document_vectors schema")
         raise
