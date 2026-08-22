@@ -14,10 +14,12 @@ services:
       - STOCK_MANAGER_URL=http://stock-manager:8001
       - NEWS_AGENT_URL=http://news-agent:8003
       - DOC_AGENT_URL=http://doc-agent:8004
+      - CHAT_AGENT_URL=http://chat-agent:8002
     depends_on:
       - stock-manager
       - news-agent
       - doc-agent
+      - chat-agent
     restart: unless-stopped
 
   stock-manager:
