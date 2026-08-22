@@ -1,15 +1,11 @@
 import { Link } from "react-router-dom";
 
+import HomeNav from "../components/HomeNav";
+
 export default function HelpPage(): JSX.Element {
   return (
     <div className="help-page">
-      <nav className="help-nav">
-        <Link to="/" className="help-logo">Stock Tracker</Link>
-        <div className="help-nav-actions">
-          <Link to="/" className="btn-outline">Back to home</Link>
-          <Link to="/login" className="btn-solid">Log in</Link>
-        </div>
-      </nav>
+      <HomeNav />
 
       <main className="help-content">
         <h1>Help</h1>
