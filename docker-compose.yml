@@ -34,18 +34,26 @@ services:
       - PYTHONPATH=/app/common:/app/backend
     restart: unless-stopped
 
-  llm-service:
+  chat-agent:
     build:
       context: .
-      dockerfile: llm_service/Dockerfile
+      dockerfile: chat_agent/Dockerfile
     ports:
       - "8002:8002"
     env_file:
-      - ./llm_service/backend/.env
+      - ./chat_agent/backend/.env
     volumes:
       - ./common:/app/common
+      - ./chat_agent/backend:/app/backend
     environment:
       - PYTHONPATH=/app/common:/app/backend
+      - STOCK_MANAGER_URL=http://stock-manager:8001
+      - NEWS_AGENT_URL=http://news-agent:8003
+      - DOC_AGENT_URL=http://doc-agent:8004
+    depends_on:
+      - stock-manager
+      - news-agent
+      - doc-agent
     restart: unless-stopped
 
   news-agent:

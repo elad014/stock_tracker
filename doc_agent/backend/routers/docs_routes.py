@@ -48,10 +48,12 @@ async def upload_document(req: IngestRequest) -> IngestResponse:
 @router.post(
     "/api/v1/docs/ask",
     tags=["Documents"],
-    summary="Answer a question from one tenant document",
+    summary="Answer a question from one tenant document, or all of them",
     description=(
-        "Embeds `query`, retrieves the top matching chunks for `(user_id, document_id)`, "
-        "and asks the LLM to answer using only those excerpts."
+        "Embeds `query` and retrieves the top matching chunks for `user_id`. "
+        "If `document_id` is set, only that file is searched. If it is omitted, "
+        "every indexed document for that user is searched. The LLM answers "
+        "using only those excerpts."
     ),
     response_model=AskResponse,
     responses={

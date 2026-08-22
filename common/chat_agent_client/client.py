@@ -3,18 +3,18 @@ from typing import Any, Optional
 import httpx
 from fastapi import HTTPException
 
-from constant import INTERNAL_API_KEY, INTERNAL_API_KEY_HEADER, LLM_SERVICE_URL
+from constant import CHAT_AGENT_URL, INTERNAL_API_KEY, INTERNAL_API_KEY_HEADER
 
 
-class LLMServiceClient:
-    """HTTP client for the internal llm-service gateway."""
+class ChatAgentClient:
+    """HTTP client for the internal chat-agent orchestrator."""
 
     def __init__(
         self,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
     ) -> None:
-        self._base_url = (base_url or LLM_SERVICE_URL).rstrip("/")
+        self._base_url = (base_url or CHAT_AGENT_URL).rstrip("/")
         self._api_key = api_key if api_key is not None else INTERNAL_API_KEY
 
     def _headers(self) -> dict[str, str]:
@@ -26,7 +26,7 @@ class LLMServiceClient:
             payload = response.json()
             detail = payload.get("detail", payload)
         except Exception:
-            detail = response.text or "LLM service request failed"
+            detail = response.text or "Chat agent request failed"
         raise HTTPException(response.status_code, detail)
 
     async def chat(
@@ -34,6 +34,7 @@ class LLMServiceClient:
         user_id: str,
         message: str,
         *,
+        document_id: Optional[str] = None,
         reset_session: bool = False,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -43,14 +44,16 @@ class LLMServiceClient:
             "message": message,
             "reset_session": reset_session,
         }
+        if document_id is not None:
+            body["document_id"] = document_id
         if temperature is not None:
             body["temperature"] = temperature
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
-                f"{self._base_url}/chat",
+                f"{self._base_url}/api/v1/chat",
                 headers=self._headers(),
                 json=body,
             )
@@ -61,7 +64,7 @@ class LLMServiceClient:
     async def clear_chat_session(self, user_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.delete(
-                f"{self._base_url}/chat/{user_id}",
+                f"{self._base_url}/api/v1/chat/{user_id}",
                 headers=self._headers(),
             )
         if response.status_code >= 400:
@@ -69,4 +72,4 @@ class LLMServiceClient:
         return response.json()
 
 
-llm_service_client = LLMServiceClient()
+chat_agent_client = ChatAgentClient()

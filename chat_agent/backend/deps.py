@@ -6,7 +6,7 @@ from fastapi.security import APIKeyHeader
 internal_api_key_header = APIKeyHeader(
     name="X-Internal-Api-Key",
     auto_error=False,
-    description="Shared internal API key required for all llm-service endpoints.",
+    description="Shared internal API key required for all chat-agent endpoints.",
 )
 
 

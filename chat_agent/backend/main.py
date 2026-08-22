@@ -1,14 +1,21 @@
+import logging
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
-from models.llm import HealthResponse
-from routers.llm_routes import router as llm_router
+from models.chat import HealthResponse
+from routers.chat_routes import router as chat_router
+
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 API_DESCRIPTION = """
-Internal LLM gateway for stock_tracker chat.
+Internal Chat Agent orchestrator for stock_tracker.
 
-News summaries are owned by news-agent via ``llm_provider_client``.
-This service keeps stateful chat for the UI.
+Gathers information only through internal HTTP clients (doc-agent, news-agent,
+stock-manager). It does not access a database. LiteLLM tool calling routes
+user questions to those agents and synthesizes a conversational reply.
 
 ## Auth
 Chat endpoints require header:
@@ -19,26 +26,26 @@ Chat endpoints require header:
 password, or `?api_key=`). They are not public.
 
 ## Endpoints
-- `POST /chat` — stateful UI chat (last 20 messages per `user_id`)
-- `DELETE /chat/{user_id}` — clear chat history
+- `POST /api/v1/chat` — stateful UI chat with tools (last 20 messages per `user_id`)
+- `DELETE /api/v1/chat/{user_id}` — clear chat history
 
 ## Configuration
 - `LLM_MODEL` — default LiteLLM model id
 - `LLM_MAX_TOKENS` — default max output tokens
-- `LLM_SYSTEM_PROMPT` — default system prompt
+- `LLM_SYSTEM_PROMPT` — extra system prompt appended to the orchestrator prompt
 - `LLM_SESSION_MAX_MESSAGES` — chat history cap (default: 20)
 - Provider keys: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
 """
 
 app = FastAPI(
-    title="LLM Service API",
+    title="Chat Agent API",
     description=API_DESCRIPTION,
     version="1.0.0",
     **disabled_docs_kwargs(),
     openapi_tags=[
         {
             "name": "Chat",
-            "description": "Stateful chat with per-user in-memory history.",
+            "description": "Orchestrated chat with per-user in-memory history.",
         },
         {
             "name": "Health",
@@ -46,7 +53,7 @@ app = FastAPI(
         },
     ],
 )
-app.include_router(llm_router)
+app.include_router(chat_router)
 mount_protected_docs(app)
 
 

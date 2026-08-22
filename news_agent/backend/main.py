@@ -30,7 +30,7 @@ Internal News Agent for stock_tracker.
 Owns `news_articles` and `stock_articles` on the shared Neon database.
 Reads `stock_quotes` only to join/filter by ticker. Rollup `stock_summery`
 is written through stock-manager HTTP (news-agent does not write quotes).
-Summaries go through ``llm_provider_client`` (LiteLLM), not llm-service.
+Summaries go through ``llm_provider_client`` (LiteLLM), not chat-agent.
 
 ## Auth
 News and agent endpoints require header:

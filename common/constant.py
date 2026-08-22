@@ -6,7 +6,11 @@ from llm_guard.prompt import compose_system_prompt
 # Internal service URLs (inter-service HTTP calls)
 # ---------------------------------------------------------------------------
 STOCK_MANAGER_URL = os.getenv("STOCK_MANAGER_URL", "http://localhost:8001").rstrip("/")
-LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002").rstrip("/")
+CHAT_AGENT_URL = os.getenv(
+    "CHAT_AGENT_URL",
+    os.getenv("LLM_SERVICE_URL", "http://localhost:8002"),
+).rstrip("/")
+LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", CHAT_AGENT_URL).rstrip("/")
 NEWS_AGENT_URL = os.getenv("NEWS_AGENT_URL", "http://localhost:8003").rstrip("/")
 DOC_AGENT_URL = os.getenv("DOC_AGENT_URL", "http://localhost:8004").rstrip("/")
 
@@ -93,7 +97,7 @@ S3_RESPONSE_CHECKSUM = "when_required"
 S3_FOLDER_PLACEHOLDER = ".emptyFolderPlaceholder"
 
 # ---------------------------------------------------------------------------
-# LLM defaults (llm-service / LiteLLM)
+# LLM defaults (chat-agent / LiteLLM)
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"
 DEPRECATED_GEMINI_MODELS = {
@@ -137,6 +141,7 @@ DOC_CHUNK_OVERLAP = 200
 DOC_TABLE_MAX_CHARS = 4_000
 DOC_DEFAULT_SECTION = "Introduction"
 DOC_TOP_K = 5
+DOC_ALL_DOCS_TOP_K = 10
 DOC_MAX_QUERY_CHARS = 1_000
 DOC_CONTEXT_MAX_CHARS = 12_000
 
@@ -159,3 +164,24 @@ DOC_INGEST_MAX_ATTEMPTS = 5
 DOC_INGEST_WINDOW_SECONDS = 60
 DOC_ASK_MAX_ATTEMPTS = 20
 DOC_ASK_WINDOW_SECONDS = 60
+
+# ---------------------------------------------------------------------------
+# Chat agent (orchestrator)
+# ---------------------------------------------------------------------------
+CHAT_MAX_TOOL_ROUNDS = 5
+CHAT_MAX_ATTEMPTS = 20
+CHAT_WINDOW_SECONDS = 60
+CHAT_ORCHESTRATOR_SYSTEM_PROMPT = compose_system_prompt(
+    "You are a highly capable and professional AI financial and document assistant. "
+    "You have access to specialized tools. You must use these tools to fetch real-time "
+    "stock data, news, or query the user's documents. Do not hallucinate data. "
+    "The user's uploaded PDFs may include company filings and reports that mention "
+    "future fiscal years, guidance, and dates. Never refuse a question as future or "
+    "not real-time without first calling ask_user_document. "
+    "If the user names a file, pass that path as document_id. If they do not name a "
+    "file, call ask_user_document with only the query so every uploaded document is "
+    "searched. Do not guess filenames. "
+    "Only after tools return no relevant information, tell the user you cannot find "
+    "that information. Synthesize tool responses into a clear, helpful, conversational "
+    "reply.",
+)

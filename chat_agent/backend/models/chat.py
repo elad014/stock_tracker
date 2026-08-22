@@ -9,7 +9,7 @@ class ChatRequest(BaseModel):
             "examples": [
                 {
                     "user_id": "e35c6172-bf33-407d-834e-fa80cc43da9c",
-                    "message": "What is a stock option?",
+                    "message": "What is AAPL trading at?",
                     "temperature": 0.2,
                 }
             ]
@@ -18,6 +18,11 @@ class ChatRequest(BaseModel):
 
     user_id: str = Field(..., description="User UUID for isolated chat history", min_length=1)
     message: str = Field(..., description="New user message", min_length=1)
+    document_id: Optional[str] = Field(
+        None,
+        description="Optional document path if the user is viewing a PDF",
+        min_length=1,
+    )
     reset_session: bool = Field(
         False,
         description="Clear stored conversation history for this user before processing",

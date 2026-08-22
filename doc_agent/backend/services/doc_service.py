@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from typing import Any, Optional
 
 from fastapi import HTTPException, status
 
@@ -8,6 +9,7 @@ from constant import (
     DOC_CHAT_MODEL,
     DOC_CHUNK_CHARS,
     DOC_CHUNK_OVERLAP,
+    DOC_ALL_DOCS_TOP_K,
     DOC_CONTEXT_MAX_CHARS,
     DOC_MAX_INDEXED_FILES,
     DOC_MAX_INGESTS_PER_WEEK,
@@ -130,6 +132,20 @@ def _join_chunks(contents: list[str]) -> str:
     return joined[:DOC_CONTEXT_MAX_CHARS]
 
 
+def _join_chunk_matches(matches: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for row in matches:
+        content = str(row.get("content") or "").strip()
+        if not content:
+            continue
+        document_id = str(row.get("document_id") or "").strip()
+        if document_id:
+            parts.append(f"Source document: {document_id}\n{content}")
+        else:
+            parts.append(content)
+    return _join_chunks(parts)
+
+
 async def _count_user_s3_files(user_id: str) -> int:
     """How many real files the user currently has in object storage."""
     try:
@@ -250,8 +266,12 @@ async def ingest_document(user_id: str, document_id: str) -> IngestResponse:
     )
 
 
-async def ask_document(query: str, user_id: str, document_id: str) -> AskResponse:
-    """Answer a question using only chunks from that user's document."""
+async def ask_document(
+    query: str,
+    user_id: str,
+    document_id: Optional[str] = None,
+) -> AskResponse:
+    """Answer a question using chunks from one document, or all of the user's documents."""
     uid = user_id.strip()
     question = query.strip()[:DOC_MAX_QUERY_CHARS]
     if not uid:
@@ -259,19 +279,24 @@ async def ask_document(query: str, user_id: str, document_id: str) -> AskRespons
     if not question:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "query must not be empty")
 
-    _key, stored_id = await resolve_document_key(
-        uid,
-        document_id,
-        require_object=False,
-    )
+    stored_id: Optional[str] = None
+    requested_id = (document_id or "").strip()
+    if requested_id:
+        _key, stored_id = await resolve_document_key(
+            uid,
+            requested_id,
+            require_object=False,
+        )
     ask_limiter.consume(uid)
+    search_limit = DOC_TOP_K if stored_id else DOC_ALL_DOCS_TOP_K
+    scope = stored_id or "*"
 
     try:
         query_vector = await _embedding_client().embed_query(question)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except RuntimeError as exc:
-        logger.exception("Query embedding failed for %s / %s", uid, stored_id)
+        logger.exception("Query embedding failed for %s / %s", uid, scope)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     try:
@@ -279,17 +304,16 @@ async def ask_document(query: str, user_id: str, document_id: str) -> AskRespons
             query_vector,
             uid,
             stored_id,
-            limit=DOC_TOP_K,
+            limit=search_limit,
         )
     except Exception as exc:
-        logger.exception("Vector search failed for %s / %s", uid, stored_id)
+        logger.exception("Vector search failed for %s / %s", uid, scope)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             "Failed to search document vectors",
         ) from exc
 
-    contents = [str(row.get("content") or "") for row in matches]
-    corpus = _join_chunks(contents)
+    corpus = _join_chunk_matches(matches)
     if not corpus:
         return AskResponse(answer=DOC_NOT_FOUND_ANSWER)
 
@@ -310,7 +334,7 @@ async def ask_document(query: str, user_id: str, document_id: str) -> AskRespons
     except ValueError as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     except RuntimeError as exc:
-        logger.exception("Doc RAG LLM failed for %s / %s", uid, stored_id)
+        logger.exception("Doc RAG LLM failed for %s / %s", uid, scope)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     answer = result.content.strip()
