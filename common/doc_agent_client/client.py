@@ -68,6 +68,42 @@ class DocAgentClient:
             return {}
         return payload
 
+    async def ask_document(
+        self,
+        user_id: str,
+        document_id: Optional[str],
+        query: str,
+    ) -> dict[str, Any]:
+        """Answer a question using that user's document, or all of their documents."""
+        uid: str = user_id.strip()
+        relative: str = (document_id or "").strip()
+        question: str = query.strip()
+        if not uid:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id must not be empty")
+        if not question:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "query must not be empty")
+        body: dict[str, Any] = {"user_id": uid, "query": question}
+        if relative:
+            body["document_id"] = relative
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self._base_url}/api/v1/docs/ask",
+                    headers=self._headers(),
+                    json=body,
+                )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Failed to reach doc agent",
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        payload = response.json()
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+
     async def purge_user(self, user_id: str) -> dict[str, Any]:
         """Delete all document vectors and ingest quota for one user."""
         uid: str = user_id.strip()

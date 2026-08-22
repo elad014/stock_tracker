@@ -1,4 +1,4 @@
-# --- LLM Service ---
+# --- Chat Agent ---
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -9,7 +9,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --upgrade litellm
 
-COPY llm_service/backend/ ./backend/
+COPY chat_agent/backend/ ./backend/
 COPY common/ ./common/
 
 EXPOSE 8002

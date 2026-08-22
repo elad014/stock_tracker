@@ -21,8 +21,8 @@ Internal Doc Agent for stock_tracker.
 
 Owns `document_vectors` on the shared Neon database (pgvector). Downloads a
 user's PDF from object storage, chunks and embeds it, and answers questions
-with Retrieval-Augmented Generation. Every query is scoped to one
-`(user_id, document_id)` pair.
+with Retrieval-Augmented Generation. Queries are scoped to `user_id` and,
+when provided, a single `document_id`.
 
 ## Auth
 Document endpoints require header:
@@ -35,7 +35,8 @@ password, or `?api_key=`). They are not public.
 ## Endpoints
 1. **Ingest** — `POST /api/v1/docs/upload`: download `{user_id}/{document_id}`
    from object storage, embed chunks, replace stored vectors
-2. **Ask** — `POST /api/v1/docs/ask`: tenant-scoped RAG over one document
+2. **Ask** — `POST /api/v1/docs/ask`: tenant-scoped RAG over one document or
+   all of that user's documents
 3. **Cleanup** — `DELETE /api/v1/docs/vectors`: drop vectors when a PDF is removed
 4. **Purge user** — `DELETE /api/v1/docs/users/{user_id}`: drop all vectors and
    the ingest quota row when an account is deleted
@@ -63,7 +64,7 @@ app = FastAPI(
             "name": "Documents",
             "description": (
                 "Ingest a stored PDF into pgvector and answer questions using "
-                "only that user's document."
+                "only that user's documents."
             ),
         },
         {

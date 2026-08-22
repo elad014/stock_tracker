@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from constant import DOC_MAX_QUERY_CHARS
@@ -26,7 +28,11 @@ class IngestResponse(BaseModel):
 class AskRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=DOC_MAX_QUERY_CHARS)
     user_id: str = Field(..., min_length=1)
-    document_id: str = Field(..., min_length=1)
+    document_id: Optional[str] = Field(
+        None,
+        min_length=1,
+        description="Path relative to the user's folder. Omit to search all of their documents.",
+    )
 
 
 class AskResponse(BaseModel):

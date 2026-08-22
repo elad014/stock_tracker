@@ -1,6 +1,6 @@
 """LiteLLM-based client for OpenAI, Anthropic, Gemini, and other providers.
 
-Used by llm-service (chat) and news-agent (summaries).
+Used by chat-agent (orchestrator) and news-agent (summaries).
 
 Environment variables:
 - ``LLM_MODEL`` — default LiteLLM model id
@@ -23,7 +23,7 @@ from litellm import acompletion
 
 from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS, NEWS_SUMMARIZE_SYSTEM_PROMPT
 from llm_guard import guarded_user_message
-from llm_provider_client.util import LLMCompletionResult
+from llm_provider_client.util import LLMCompletionResult, LLMToolCall
 
 load_dotenv()
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMProviderClient:
-    """LiteLLM vendor client used by llm-service and news-agent."""
+    """LiteLLM vendor client used by chat-agent and news-agent."""
 
     def __init__(self, model: str | None = None) -> None:
         configured = (model or os.getenv("LLM_MODEL", "")).strip()
@@ -77,8 +77,34 @@ class LLMProviderClient:
                 "LLM vendor returned an unexpected response shape"
             ) from exc
         if content is None:
-            raise RuntimeError("LLM vendor returned an empty response")
+            return ""
         return str(content)
+
+    def _extract_tool_calls(self, response: Any) -> list[LLMToolCall]:
+        try:
+            raw_calls = response.choices[0].message.tool_calls
+        except (AttributeError, IndexError, KeyError, TypeError):
+            return []
+        if not raw_calls:
+            return []
+        parsed: list[LLMToolCall] = []
+        for item in raw_calls:
+            if isinstance(item, dict):
+                function = item.get("function") or {}
+                call_id = str(item.get("id") or "")
+                name = str(function.get("name") or "")
+                arguments = str(function.get("arguments") or "{}")
+            else:
+                function = getattr(item, "function", None)
+                call_id = str(getattr(item, "id", "") or "")
+                name = str(getattr(function, "name", "") or "") if function else ""
+                arguments = (
+                    str(getattr(function, "arguments", "") or "{}") if function else "{}"
+                )
+            if not name:
+                continue
+            parsed.append(LLMToolCall(id=call_id, name=name, arguments=arguments))
+        return parsed
 
     def _extract_usage(
         self,
@@ -95,12 +121,14 @@ class LLMProviderClient:
 
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         *,
         model: str | None = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         response_format: Optional[dict[str, Any]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
+        tool_choice: Optional[str | dict[str, Any]] = None,
     ) -> LLMCompletionResult:
         if not messages:
             raise ValueError("messages must not be empty")
@@ -118,6 +146,10 @@ class LLMProviderClient:
             kwargs["max_tokens"] = max_tokens
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if tools:
+            kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
 
         try:
             response = await acompletion(**kwargs)
@@ -126,12 +158,17 @@ class LLMProviderClient:
             raise RuntimeError(f"LLM vendor request failed: {exc}") from exc
 
         prompt_tokens, completion_tokens, total_tokens = self._extract_usage(response)
+        tool_calls = self._extract_tool_calls(response)
+        content = self._extract_content(response)
+        if not content and not tool_calls:
+            raise RuntimeError("LLM vendor returned an empty response")
         return LLMCompletionResult(
-            content=self._extract_content(response),
+            content=content,
             model=getattr(response, "model", None) or resolved_model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
+            tool_calls=tool_calls,
         )
 
     @staticmethod

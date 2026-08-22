@@ -14,7 +14,9 @@ def embedding_literal(values: list[float]) -> str:
 
 def _chunk_row(row: dict[str, Any]) -> dict[str, Any]:
     similarity = row.get("similarity")
+    document_id = row.get("document_id")
     return {
+        "document_id": str(document_id) if document_id is not None else "",
         "content": str(row["content"]),
         "similarity": float(similarity) if similarity is not None else None,
     }
@@ -109,22 +111,39 @@ async def count_document_chunks(
 async def search_similar(
     query_embedding: list[float],
     user_id: str,
-    document_id: str,
+    document_id: Optional[str] = None,
     limit: int = 5,
     conn: Optional[asyncpg.Connection] = None,
 ) -> list[dict[str, Any]]:
-    """Return the top-k cosine-similar chunks for one tenant document."""
+    """Return the top-k cosine-similar chunks for one document, or all of a user's docs."""
+    vector = embedding_literal(query_embedding)
+    stored_id = (document_id or "").strip() or None
+    if stored_id is None:
+        rows = await db.fetch_all(
+            f"""
+            SELECT document_id, content, 1 - (embedding <=> $1::vector) AS similarity
+            FROM {VECTORS_TABLE}
+            WHERE user_id = $2
+            ORDER BY embedding <=> $1::vector
+            LIMIT $3
+            """,
+            vector,
+            user_id,
+            limit,
+            conn=conn,
+        )
+        return [_chunk_row(row) for row in rows]
     rows = await db.fetch_all(
         f"""
-        SELECT content, 1 - (embedding <=> $1::vector) AS similarity
+        SELECT document_id, content, 1 - (embedding <=> $1::vector) AS similarity
         FROM {VECTORS_TABLE}
         WHERE user_id = $2 AND document_id = $3
         ORDER BY embedding <=> $1::vector
         LIMIT $4
         """,
-        embedding_literal(query_embedding),
+        vector,
         user_id,
-        document_id,
+        stored_id,
         limit,
         conn=conn,
     )

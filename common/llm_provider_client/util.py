@@ -1,8 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from llm_guard.prompt import wrap_untrusted
 
-__all__ = ["LLMCompletionResult", "wrap_untrusted"]
+@dataclass
+class LLMToolCall:
+    id: str
+    name: str
+    arguments: str
 
 
 @dataclass
@@ -12,3 +15,4 @@ class LLMCompletionResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    tool_calls: list[LLMToolCall] = field(default_factory=list)
