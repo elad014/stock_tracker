@@ -45,6 +45,13 @@ async def insert_chunks(
     )
 
 
+def _deleted_row_count(status: str) -> int:
+    parts = status.split()
+    if len(parts) >= 2 and parts[-1].isdigit():
+        return int(parts[-1])
+    return 0
+
+
 async def delete_document_vectors(
     user_id: str,
     document_id: str,
@@ -60,10 +67,23 @@ async def delete_document_vectors(
         document_id,
         conn=conn,
     )
-    parts = status.split()
-    if len(parts) >= 2 and parts[-1].isdigit():
-        return int(parts[-1])
-    return 0
+    return _deleted_row_count(status)
+
+
+async def delete_user_vectors(
+    user_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> int:
+    """Delete every chunk belonging to one user."""
+    status = await db.execute(
+        f"""
+        DELETE FROM {VECTORS_TABLE}
+        WHERE user_id = $1
+        """,
+        user_id,
+        conn=conn,
+    )
+    return _deleted_row_count(status)
 
 
 async def count_document_chunks(

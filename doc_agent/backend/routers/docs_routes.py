@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
 from deps import verify_internal_api_key
 from models.docs import (
@@ -7,6 +7,7 @@ from models.docs import (
     DeleteVectorsResponse,
     IngestRequest,
     IngestResponse,
+    PurgeUserResponse,
 )
 import services.doc_service as doc_service
 
@@ -80,3 +81,22 @@ async def delete_document_vectors(
     ),
 ) -> DeleteVectorsResponse:
     return await doc_service.delete_document_vectors(user_id, document_id)
+
+
+@router.delete(
+    "/api/v1/docs/users/{user_id}",
+    tags=["Documents"],
+    summary="Delete all document data for a user",
+    description=(
+        "Removes every `document_vectors` row and the `document_ingest_quota` "
+        "row for `user_id`. Called when an admin deletes the account."
+    ),
+    response_model=PurgeUserResponse,
+    responses={
+        400: {"description": "Invalid user_id"},
+    },
+)
+async def purge_user_documents(
+    user_id: str = Path(..., min_length=1, description="Owning user id"),
+) -> PurgeUserResponse:
+    return await doc_service.purge_user(user_id)

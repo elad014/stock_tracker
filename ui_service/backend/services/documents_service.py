@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from typing import Any, Optional
@@ -5,10 +6,12 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import HTTPException, UploadFile, status
 
+from doc_agent_client import doc_agent_client as doc_agent
 from models.auth import MessageResponse
 from models.documents import DocumentTree, DownloadUrlResponse, TreeNode
 from object_storage_client import (
     ObjectStorageClient,
+    ObjectStorageError,
     StoredObject,
     folder_placeholder_key,
     is_placeholder_key,
@@ -26,6 +29,8 @@ DOWNLOAD_URL_EXPIRE_SECONDS: int = 300
 # client-controlled, so the bytes are what actually decide.
 _PDF_MAGIC = b"%PDF-"
 _ALLOWED_CONTENT_TYPES = {"application/pdf", "application/x-pdf", "application/octet-stream"}
+
+logger = logging.getLogger(__name__)
 
 # One path segment: no slashes, no leading/trailing dot, nothing exotic.
 # Leading underscore is allowed so names like _3.pdf round-trip after upload.
@@ -262,14 +267,36 @@ async def upload_document(
 
 
 async def delete_file(user: dict[str, Any], path: str) -> MessageResponse:
-    key: str = _absolute(user["id"], path)
+    user_id: str = user["id"]
+    relative: str = _normalize_relative(path)
+    key: str = _absolute(user_id, relative)
     if is_placeholder_key(key):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid file")
     if not await storage.exists(key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
+    await _delete_document_vectors(user_id, relative)
     await storage.delete(key)
     return MessageResponse(message="File deleted")
+
+
+async def _delete_document_vectors(user_id: str, relative_path: str) -> None:
+    await doc_agent.delete_document_vectors(user_id, relative_path)
+
+
+async def delete_all_user_files(user_id: str) -> int:
+    """Delete every object under the user's S3 prefix, including folder markers."""
+    uid: str = user_id.strip()
+    if not uid or "/" in uid or "\\" in uid or uid in {".", ".."}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user_id")
+    try:
+        return await storage.delete_prefix(_user_root(uid))
+    except ObjectStorageError as exc:
+        logger.exception("Failed to delete S3 documents for %s", uid)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to delete user documents from storage",
+        ) from exc
 
 
 async def move_file(user: dict[str, Any], path: str, folder: Optional[str]) -> TreeNode:
@@ -302,6 +329,7 @@ async def move_file(user: dict[str, Any], path: str, folder: Optional[str]) -> T
         )
 
     stored: StoredObject = await storage.copy(source_key, dest_key)
+    await _delete_document_vectors(user_id, _normalize_relative(path))
     await storage.delete(source_key)
     return TreeNode(
         name=filename,

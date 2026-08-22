@@ -88,6 +88,23 @@ async def record_successful_ingest(
     )
 
 
+async def delete_user_quota(
+    user_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> bool:
+    """Remove the user's weekly ingest quota row. True if a row was deleted."""
+    status = await db.execute(
+        f"""
+        DELETE FROM {INGEST_QUOTA_TABLE}
+        WHERE user_id = $1
+        """,
+        user_id,
+        conn=conn,
+    )
+    parts = status.split()
+    return len(parts) >= 2 and parts[-1].isdigit() and int(parts[-1]) > 0
+
+
 def retry_after_seconds(
     first_ingest: Optional[datetime],
     days: int = DOC_INGEST_WEEK_DAYS,

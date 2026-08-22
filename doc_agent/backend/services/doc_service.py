@@ -23,7 +23,12 @@ from embedding_client import EmbeddingClient
 from llm_guard import guarded_user_message
 from llm_limits import ask_limiter, ingest_limiter
 from llm_provider_client import LLMProviderClient
-from models.docs import AskResponse, DeleteVectorsResponse, IngestResponse
+from models.docs import (
+    AskResponse,
+    DeleteVectorsResponse,
+    IngestResponse,
+    PurgeUserResponse,
+)
 from object_storage_client import ObjectStorageClient, ObjectStorageError, is_placeholder_key
 from object_storage_client.util import normalize_key
 from services.chunker import chunk_extracted_document
@@ -50,11 +55,16 @@ def _normalize_document_id(document_id: str) -> str:
     return relative
 
 
-def document_storage_key(user_id: str, document_id: str) -> tuple[str, str]:
-    """Build the tenant-scoped S3 key and the stored document_id."""
+def _require_user_id(user_id: str) -> str:
     uid = user_id.strip()
     if not uid or "/" in uid or "\\" in uid or uid in {".", ".."}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid user_id")
+    return uid
+
+
+def document_storage_key(user_id: str, document_id: str) -> tuple[str, str]:
+    """Build the tenant-scoped S3 key and the stored document_id."""
+    uid = _require_user_id(user_id)
 
     relative = _normalize_document_id(document_id)
     try:
@@ -329,4 +339,24 @@ async def delete_document_vectors(user_id: str, document_id: str) -> DeleteVecto
         user_id=uid,
         document_id=stored_id,
         deleted_chunks=deleted,
+    )
+
+
+async def purge_user(user_id: str) -> PurgeUserResponse:
+    """Drop every vector chunk and the ingest quota row for one user."""
+    uid = _require_user_id(user_id)
+    try:
+        async with db.transaction() as conn:
+            deleted_chunks = await vectors_db.delete_user_vectors(uid, conn=conn)
+            quota_deleted = await ingest_events_db.delete_user_quota(uid, conn=conn)
+    except Exception as exc:
+        logger.exception("Failed to purge document data for %s", uid)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Failed to delete user document index",
+        ) from exc
+    return PurgeUserResponse(
+        user_id=uid,
+        deleted_chunks=deleted_chunks,
+        quota_deleted=quota_deleted,
     )

@@ -37,3 +37,9 @@ class DeleteVectorsResponse(BaseModel):
     user_id: str
     document_id: str
     deleted_chunks: int = Field(..., ge=0)
+
+
+class PurgeUserResponse(BaseModel):
+    user_id: str
+    deleted_chunks: int = Field(..., ge=0)
+    quota_deleted: bool
