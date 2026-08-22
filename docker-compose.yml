@@ -63,3 +63,18 @@ services:
     depends_on:
       - stock-manager
     restart: unless-stopped
+
+  doc-agent:
+    build:
+      context: .
+      dockerfile: doc_agent/Dockerfile
+    ports:
+      - "8004:8004"
+    env_file:
+      - ./doc_agent/backend/.env
+    volumes:
+      - ./common:/app/common
+      - ./doc_agent/backend:/app/backend
+    environment:
+      - PYTHONPATH=/app/common:/app/backend
+    restart: unless-stopped
