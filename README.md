@@ -1,111 +1,142 @@
 # Stock Tracker
 
-A web application for tracking investment portfolios, monitoring real-time stock data, and receiving AI-powered financial insights and notifications.
+A web app for following stocks, reading related news, uploading PDFs, and asking an AI assistant about your watchlist and documents.
 
-## Overview
+The app is **not** an investment advisory tool. Market data, news summaries, and chat replies are for research only.
 
-Stock Tracker is designed to help users:
+## What it does
 
-- Create a personal account and manage their profile.
-- Build and manage a personalized investment portfolio of stocks, indices, and cryptocurrencies.
-- Track real-time financial data including prices, daily changes, and historical charts.
-- Stay updated with relevant financial news per asset.
-- Receive AI-based analysis, summaries, and recommendations powered by artificial intelligence.
-- Get alerts and notifications on significant events for tracked assets.
+- Create an account, sign in, reset a forgotten password, and update profile settings.
+- Build a watchlist of Twelve Data tickers and view price, change, history charts, and market stats.
+- Read Finnhub news per stock, with optional AI article summaries and a stock-level news rollup.
+- Upload PDFs, organize them in folders, and ask questions over those files (RAG).
+- Chat from the dashboard; the assistant can use stock quotes, news, and your documents.
+- Admin users can manage accounts, locks, and watchlist assignments.
 
-The system aggregates data from multiple sources (stocks, market indices like S&P 500, Nasdaq-100, TA-35, TA-125, and cryptocurrencies) into a single unified platform with a clean dashboard experience.
+Home-page quotes are an illustrative snapshot, not live brokerage data. Signed-in quotes come from stock-manager.
 
-> **Note:** The application is **not** an investment advisory tool. It helps users better understand real-time data through automated notifications and AI-based analysis.
+## Architecture
 
-## Tech Stack
+Five Docker services share one Neon PostgreSQL database (plus pgvector for documents). The UI service is the only public API. Internal agents talk over HTTP with `X-Internal-Api-Key`.
 
-| Layer              | Technology                                    |
-| ------------------ | --------------------------------------------- |
-| **Frontend**       | React 18, TypeScript, Vite 5, React Router 6  |
-| **Backend**        | Python 3.12, FastAPI, Uvicorn                 |
-| **Database**       | PostgreSQL (Neon)                              |
-| **Authentication** | bcrypt (password hashing), JWT (python-jose)   |
-| **Email**          | Resend API via httpx                           |
-| **Validation**     | Pydantic v2                                    |
-| **Containerization** | Docker, Docker Compose                       |
+```
+Browser
+  -> ui-service :8000   React SPA + FastAPI (JWT)
+       -> stock-manager :8001   quotes, history, watchlist
+       -> news-agent    :8003   Finnhub articles + LLM summaries
+       -> doc-agent     :8004   PDF ingest, embeddings, RAG
+       -> chat-agent    :8002   LiteLLM orchestrator (no database)
+```
 
-## Project Structure
+Chat-agent calls the other three internal services. News-agent writes stock rollup summaries through stock-manager. Doc-agent reads PDFs from the same object-storage bucket that ui-service writes to.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 18, TypeScript, Vite 5, React Router 6, Axios |
+| Backend | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
+| Database | PostgreSQL (Neon), pgvector |
+| Auth | bcrypt, JWT (`python-jose`) |
+| Email | Resend |
+| Object storage | Supabase Storage over the S3 protocol (`boto3`) |
+| Market data | Twelve Data |
+| News | Finnhub, trafilatura for article text |
+| LLM | LiteLLM (Gemini by default; OpenAI and Anthropic supported) |
+| Scheduling | APScheduler in stock-manager and news-agent |
+| Containers | Docker, Docker Compose |
+
+## Project structure
 
 ```
 stock_tracker/
-├── docker-compose.yml          # Service orchestration
-├── requirements.txt            # Python dependencies
-├── ui_service/
-│   ├── Dockerfile              # Multi-stage build (frontend + backend)
-│   ├── backend/
-│   │   ├── main.py             # FastAPI app entry point
-│   │   ├── auth.py             # Authentication endpoints
-│   │   ├── models.py           # Pydantic request/response schemas
-│   │   └── db_logics/
-│   │       └── user_db_logic.py  # User data access layer
-│   └── frontend/
-│       ├── src/
-│       │   ├── App.tsx
-│       │   ├── api/auth.ts     # API client
-│       │   └── pages/          # Login, Register, Recovery pages
-│       ├── package.json
-│       └── vite.config.ts
-└── common/                     # Shared utility clients
-    ├── database_client/        # Async PostgreSQL client (Neon)
-    └── email_client/           # Resend email client
+├── docker-compose.yml
+├── requirements.txt
+├── ui_service/          # Public SPA + BFF (port 8000)
+├── stock_manager/       # Quotes, history, watchlist (port 8001)
+├── chat_agent/          # Chat orchestrator (port 8002)
+├── news_agent/          # News fetch and summaries (port 8003)
+├── doc_agent/           # PDF embeddings and RAG (port 8004)
+└── common/              # Shared clients, constants, and guards
 ```
 
-## User Types
+`common/` includes clients for the database, email, object storage, Twelve Data, Finnhub, LiteLLM, embeddings, article extraction, and HTTP clients for each internal service.
 
-| Role      | Capabilities                                                              |
-| --------- | ------------------------------------------------------------------------- |
-| **User**  | Register, login, manage portfolio, track stocks, view news, receive alerts and AI insights |
-| **Admin** | Manage users, manage asset lists, configure AI service quality, view system dashboards, send notifications |
+## Pages
 
-## Supported Financial Assets
+| Path | Who | Purpose |
+| --- | --- | --- |
+| `/` | Public | Marketing home |
+| `/help` | Public | Product help |
+| `/login`, `/register`, `/forgot-password` | Public | Auth |
+| `/dashboard` | Signed in | Watchlist, documents, news, chat |
+| `/stock/:stockId` | Signed in | Charts, market data, articles |
+| `/settings` | Signed in | Profile and password |
+| `/admin` | Admin | Users and stocks |
 
-- **Stocks** - Individual company shares
-- **Market Indices** - S&P 500, Nasdaq-100, TA-35, TA-125
-- **Cryptocurrencies** - Digital assets
+## Public API (ui-service)
 
-## Workflow
+JWT is required except for register, login, and password reset.
 
-1. User registers and creates a personal account.
-2. User logs in and accesses their personal dashboard.
-3. User builds a portfolio by adding stocks, indices, and cryptocurrencies.
-4. The system provides real-time data updates for each asset in the portfolio.
-5. In parallel, the system fetches financial news and alerts relevant to the user's assets.
-6. The AI engine analyzes events and produces actionable insights.
-7. User receives summaries, recommendations based on AI analysis, and notifications on asset developments.
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/auth/register` | Create an account |
+| POST | `/auth/login` | Sign in and receive a JWT |
+| GET | `/auth/me` | Current user |
+| PUT | `/auth/me` | Update profile or password |
+| POST | `/auth/password-reset-request` | Request a reset email |
+| POST | `/auth/password-reset-confirm` | Set a new password with the token |
+| GET/POST | `/watchlist` | List or add followed stocks |
+| DELETE | `/watchlist/{stock_id}` | Remove a followed stock |
+| GET | `/stocks/{stock_id}` | Quote and summary |
+| GET | `/stocks/{stock_id}/history` | History (`range=1D` … `5Y`) |
+| GET | `/stocks/{stock_id}/articles` | Stored news articles |
+| POST | `/stocks/{stock_id}/articles/{article_id}/summarize` | Summarize one article |
+| GET | `/documents/tree` | Folder and file tree |
+| POST | `/documents/files` | Upload a PDF |
+| POST | `/documents/files/move` | Move a file |
+| GET | `/documents/files/download` | Presigned download URL |
+| DELETE | `/documents/files` | Delete a file |
+| POST/DELETE | `/documents/folders` | Create or delete a folder |
+| POST | `/chat` | Ask the assistant |
+| GET/POST/PUT/DELETE | `/admin/*` | Admin user and stock tools |
 
-## API Endpoints
+Internal services expose their own `/health` plus API-key-protected `/docs`.
 
-| Method | Path                          | Description                    |
-| ------ | ----------------------------- | ------------------------------ |
-| POST   | `/auth/register`              | Create a new user account      |
-| POST   | `/auth/login`                 | Login and receive a JWT token  |
-| POST   | `/auth/password-reset-request`| Request a password reset email |
-| POST   | `/auth/password-reset-confirm`| Reset password with token      |
-| GET    | `/*`                          | Serve frontend SPA             |
+## Limits
 
-## Getting Started
+| Limit | Default |
+| --- | --- |
+| PDF files per user | 10 |
+| Upload size | 20 MB |
+| Document indexes per rolling 7 days | 20 |
+| Chat session history | 20 messages |
+| JWT lifetime | 30 minutes |
+| Password-reset token | 15 minutes |
+
+## Database tables
+
+`user_auth_data`, `stock_quotes`, `stock_history`, `stock_history_archive`, `watchlist`, `news_articles`, `stock_articles`, `document_vectors`, `document_ingest_quota`.
+
+## Getting started
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js 20+ (for local frontend development)
-- Python 3.12+ (for local backend development)
+- Node.js 20+ and Python 3.12+ for local development
+- A Neon database, Resend account, Twelve Data key, Finnhub key, Gemini (or other LiteLLM) key, and Supabase Storage S3 credentials
 
-### Environment Variables
+### Environment files
 
-Create a `.env` file at `ui_service/backend/.env` with the following:
+Copy each example file to `.env` in the same folder and fill in real values:
 
-```
-DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
-JWT_SECRET_KEY=your-secret-key
-RESEND_API_KEY=your-resend-api-key
-EMAIL_FROM=noreply@yourdomain.com
-```
+- `ui_service/backend/.env.example`
+- `stock_manager/backend/.env.example`
+- `chat_agent/backend/.env.example`
+- `news_agent/backend/.env.example`
+- `doc_agent/backend/.env.example`
+
+`INTERNAL_API_KEY` must match across services. `DATABASE_URL` is used by ui-service, stock-manager, news-agent, and doc-agent. Chat-agent has no database. Ui-service and doc-agent must use the same S3 bucket for user PDFs.
 
 ### Run with Docker
 
@@ -113,19 +144,31 @@ EMAIL_FROM=noreply@yourdomain.com
 docker-compose up --build
 ```
 
-The application will be available at `http://localhost:8000`.
+The app is at `http://localhost:8000`.
 
-### Local Development
+| Service | Port |
+| --- | --- |
+| ui-service | 8000 |
+| stock-manager | 8001 |
+| chat-agent | 8002 |
+| news-agent | 8003 |
+| doc-agent | 8004 |
 
-**Backend:**
+### Local development
+
+Install Python dependencies once from the repo root:
 
 ```bash
 pip install -r requirements.txt
-cd ui_service/backend
+```
+
+Run each backend from its `backend` folder (`PYTHONPATH` must include `common` and that backend). Default ports match the table above.
+
+```bash
 uvicorn main:app --reload --port 8000
 ```
 
-**Frontend:**
+Frontend (proxies API routes to port 8000):
 
 ```bash
 cd ui_service/frontend
@@ -133,30 +176,13 @@ npm install
 npm run dev
 ```
 
-The Vite dev server starts at `http://localhost:5173` and proxies API requests to the backend.
+Vite starts at `http://localhost:5173`.
 
-## Database Schema
+## User types
 
-The application expects a PostgreSQL table:
+| Role | Capabilities |
+| --- | --- |
+| User | Account, watchlist, stock details, documents, news, chat, settings |
+| Admin | Everything a user can do, plus manage users, locks, stocks, and watchlist assignments |
 
-```sql
-CREATE TABLE user_auth_data (
-    id            TEXT PRIMARY KEY,
-    user_name     TEXT UNIQUE NOT NULL,
-    password      TEXT NOT NULL,
-    email         TEXT UNIQUE NOT NULL,
-    phone_number  TEXT
-);
-```
-
-## Planned Features
-
-- Real-time stock data tracking and historical charts
-- Personal portfolio management with P&L tracking
-- Financial news feed per asset
-- AI-powered analysis module (alerts, summaries, sentiment analysis, recommendations)
-- Custom notification system (real-time and scheduled)
-- Interactive dashboards with customizable panels
-- Admin panel for user and system management
-- Support for cryptocurrency exchanges (e.g., Binance)
-- Advanced AI models for financial question answering
+Deleting a user from admin removes that account’s S3 files, vectors, ingest quota, and watchlist rows.

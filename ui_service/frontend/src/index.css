@@ -735,6 +735,10 @@ body {
   color: #e2e8f0;
 }
 
+.help-section a {
+  color: #e2e8f0;
+}
+
 .help-actions {
   display: flex;
   gap: 1rem;
