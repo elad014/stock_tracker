@@ -11,6 +11,7 @@ export default defineConfig({
       "/admin": "http://localhost:8000",
       "/stocks": "http://localhost:8000",
       "/documents": "http://localhost:8000",
+      "/chat": "http://localhost:8000",
     },
   },
 });

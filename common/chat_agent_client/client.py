@@ -1,7 +1,7 @@
 from typing import Any, Optional
 
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 from constant import CHAT_AGENT_URL, INTERNAL_API_KEY, INTERNAL_API_KEY_HEADER
 
@@ -51,22 +51,34 @@ class ChatAgentClient:
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
 
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                f"{self._base_url}/api/v1/chat",
-                headers=self._headers(),
-                json=body,
-            )
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                response = await client.post(
+                    f"{self._base_url}/api/v1/chat",
+                    headers=self._headers(),
+                    json=body,
+                )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Failed to reach chat agent",
+            ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
         return response.json()
 
     async def clear_chat_session(self, user_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.delete(
-                f"{self._base_url}/api/v1/chat/{user_id}",
-                headers=self._headers(),
-            )
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.delete(
+                    f"{self._base_url}/api/v1/chat/{user_id}",
+                    headers=self._headers(),
+                )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Failed to reach chat agent",
+            ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
         return response.json()

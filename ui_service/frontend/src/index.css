@@ -1005,8 +1005,8 @@ body {
 
 .chat-panel {
   width: 100%;
-  max-width: 380px;
-  height: min(520px, 80vh);
+  max-width: 560px;
+  height: min(720px, 88vh);
   background: #1e293b;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
@@ -1049,6 +1049,7 @@ body {
   color: #e2e8f0;
   font-size: 0.88rem;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .chat-bubble-user {
@@ -1059,24 +1060,69 @@ body {
 
 .chat-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 0.5rem;
   padding: 0.85rem 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.chat-input-row input {
+.chat-input-row textarea {
   flex: 1;
+  min-height: 4.6em;
+  resize: none;
   padding: 0.55rem 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   background: rgba(15, 23, 42, 0.6);
   color: #f1f5f9;
   font-size: 0.9rem;
+  font-family: inherit;
+  line-height: 1.4;
   outline: none;
 }
 
-.chat-input-row input:focus {
+.chat-input-row textarea:focus {
   border-color: #38bdf8;
+}
+
+.chat-input-row textarea:disabled {
+  opacity: 0.65;
+}
+
+.chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.2rem;
+}
+
+.chat-typing-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: chat-typing-bounce 1.2s infinite ease-in-out;
+}
+
+.chat-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes chat-typing-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-0.28rem);
+  }
 }
 
 @media (max-width: 1200px) {

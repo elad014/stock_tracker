@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { fetchCurrentUser } from "../../services/authService";
@@ -16,6 +16,7 @@ import {
   moveDocument,
   uploadDocument,
 } from "../../services/documentService";
+import { chatErrorMessage, sendChatMessage } from "../../services/chatService";
 import DocumentTree from "../components/DocumentTree";
 import type { DocumentTree as DocumentTreeData, TreeNode } from "../../models/documents";
 import type { WatchlistStock } from "../../models/watchlist";
@@ -64,11 +65,13 @@ export default function DashboardPage(): JSX.Element {
   const [listError, setListError] = useState<string>("");
   const [chatOpen, setChatOpen] = useState<boolean>(false);
   const [chatInput, setChatInput] = useState<string>("");
+  const [chatBusy, setChatBusy] = useState<boolean>(false);
+  const [activeDocument, setActiveDocument] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      text: "Ask me about your followed stocks. LLM connection coming soon.",
+      text: "Ask me about your stocks, news, or uploaded documents.",
     },
   ]);
   const [docTree, setDocTree] = useState<DocumentTreeData | null>(null);
@@ -198,6 +201,9 @@ export default function DashboardPage(): JSX.Element {
         }
       } else {
         await deleteDocumentFile(node.path);
+        if (activeDocument === node.path) {
+          setActiveDocument("");
+        }
       }
       await loadDocuments();
     } catch (err: any) {
@@ -216,6 +222,9 @@ export default function DashboardPage(): JSX.Element {
     setDocBusy(true);
     try {
       await moveDocument(node.path, selectedFolder);
+      if (activeDocument === node.path) {
+        setActiveDocument("");
+      }
       await loadDocuments();
     } catch (err: any) {
       setDocError(err.response?.data?.detail ?? "Could not move file");
@@ -228,6 +237,7 @@ export default function DashboardPage(): JSX.Element {
     setDocError("");
     try {
       const url: string = await fetchDownloadUrl(node.path);
+      setActiveDocument(node.path);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
       setDocError(err.response?.data?.detail ?? "Could not open file");
@@ -275,10 +285,10 @@ export default function DashboardPage(): JSX.Element {
     }
   }
 
-  function handleSendChat(e: FormEvent): void {
+  async function handleSendChat(e: FormEvent | KeyboardEvent<HTMLTextAreaElement>): Promise<void> {
     e.preventDefault();
     const text: string = chatInput.trim();
-    if (!text) {
+    if (!text || chatBusy) {
       return;
     }
     const userMsg: ChatMessage = {
@@ -286,13 +296,32 @@ export default function DashboardPage(): JSX.Element {
       role: "user",
       text,
     };
-    const reply: ChatMessage = {
-      id: `a-${Date.now()}`,
-      role: "assistant",
-      text: "LLM connection coming soon. Your message was received.",
-    };
-    setMessages((prev: ChatMessage[]) => [...prev, userMsg, reply]);
+    setMessages((prev: ChatMessage[]) => [...prev, userMsg]);
     setChatInput("");
+    setChatBusy(true);
+    try {
+      const reply = await sendChatMessage(text, activeDocument || undefined);
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: reply.content,
+      };
+      setMessages((prev: ChatMessage[]) => [...prev, assistantMsg]);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+        return;
+      }
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: chatErrorMessage(err),
+      };
+      setMessages((prev: ChatMessage[]) => [...prev, assistantMsg]);
+    } finally {
+      setChatBusy(false);
+    }
   }
 
   const visibleNews: NewsItem[] = stocks
@@ -579,15 +608,33 @@ export default function DashboardPage(): JSX.Element {
                   {msg.text}
                 </div>
               ))}
+              {chatBusy ? (
+                <div className="chat-bubble chat-typing" aria-label="Waiting for answer">
+                  <span className="chat-typing-dot" />
+                  <span className="chat-typing-dot" />
+                  <span className="chat-typing-dot" />
+                </div>
+              ) : null}
             </div>
             <form className="chat-input-row" onSubmit={handleSendChat}>
-              <input
-                type="text"
+              <textarea
+                rows={3}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSendChat(e);
+                  }
+                }}
                 placeholder="Ask about your portfolio..."
+                disabled={chatBusy}
               />
-              <button type="submit" className="btn-solid btn-compact">
+              <button
+                type="submit"
+                className="btn-solid btn-compact"
+                disabled={chatBusy || !chatInput.trim()}
+              >
                 Send
               </button>
             </form>
