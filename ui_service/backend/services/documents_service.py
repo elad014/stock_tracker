@@ -256,6 +256,14 @@ async def upload_document(
         upload.file,
         content_type="application/pdf",
     )
+    try:
+        await doc_agent.ingest_document(user_id, relative)
+    except Exception:
+        try:
+            await storage.delete(key)
+        except ObjectStorageError:
+            logger.exception("Failed to roll back S3 upload after ingest error: %s", key)
+        raise
     return TreeNode(
         name=filename,
         path=relative,
