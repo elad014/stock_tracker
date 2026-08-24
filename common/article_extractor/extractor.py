@@ -12,11 +12,17 @@ from urllib.parse import urljoin
 import requests
 import trafilatura
 
-from article_extractor.util import clean_text, is_safe_article_url, truncate
+from article_extractor.util import (
+    clean_text,
+    is_safe_article_url,
+    is_usable_article_text,
+    truncate,
+)
 from constant import (
     ARTICLE_EXTRACT_MAX_BYTES,
     ARTICLE_EXTRACT_MAX_CHARS,
     ARTICLE_EXTRACT_MAX_REDIRECTS,
+    ARTICLE_EXTRACT_MIN_CHARS,
     ARTICLE_EXTRACT_TIMEOUT_SECONDS,
     ARTICLE_EXTRACT_USER_AGENT,
 )
@@ -103,6 +109,7 @@ class ArticleExtractor:
         if not html:
             return None
 
+        extracted: Optional[str] = None
         try:
             extracted = trafilatura.extract(
                 html,
@@ -111,6 +118,14 @@ class ArticleExtractor:
                 include_tables=False,
                 favor_precision=True,
             )
+            if not extracted:
+                extracted = trafilatura.extract(
+                    html,
+                    url=normalized,
+                    include_comments=False,
+                    include_tables=False,
+                    favor_recall=True,
+                )
         except Exception:
             logger.exception("Article extraction failed for %s", normalized)
             return None
@@ -119,6 +134,7 @@ class ArticleExtractor:
             return None
 
         text = clean_text(extracted)
-        if not text:
+        if not is_usable_article_text(text, ARTICLE_EXTRACT_MIN_CHARS):
+            logger.info("Discarded non-article extract for %s", normalized)
             return None
         return truncate(text, self._max_chars)

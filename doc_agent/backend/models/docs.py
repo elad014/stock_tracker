@@ -37,6 +37,7 @@ class AskRequest(BaseModel):
 
 class AskResponse(BaseModel):
     answer: str
+    excerpts: list[str] = Field(default_factory=list)
 
 
 class DeleteVectorsResponse(BaseModel):

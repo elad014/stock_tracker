@@ -5,11 +5,16 @@ from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from constant import ARTICLE_RETENTION_DAYS
+from constant import ARTICLE_EXTRACT_RETRY_LIMIT, ARTICLE_RETENTION_DAYS
 from llm_limits import news_update_guard
 from llm_provider_client import LLMProviderClient
 from news_provider_client import NewsItem, NewsProviderClient
-from services.article_service import purge_old_articles, to_article_payload, upsert_stock_articles
+from services.article_service import (
+    purge_old_articles,
+    retry_missing_article_bodies,
+    to_article_payload,
+    upsert_stock_articles,
+)
 from stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
@@ -92,6 +97,16 @@ async def run_news_update() -> None:
     )
     news_provider = _news_provider()
     llm_client = _llm_client()
+
+    try:
+        retried: int = await retry_missing_article_bodies(
+            ARTICLE_RETENTION_DAYS,
+            ARTICLE_EXTRACT_RETRY_LIMIT,
+        )
+        if retried:
+            logger.info("Filled extracted article text for %s stored rows", retried)
+    except Exception:
+        logger.exception("Failed to retry article text extraction")
 
     for stock in stocks:
         stock_id = str(stock.get("stock_id") or "")

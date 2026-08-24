@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import asyncpg
 
+from constant import ARTICLE_EXTRACT_MIN_CHARS
 from database_client import db
 
 ARTICLES_TABLE = "news_articles"
@@ -158,6 +159,33 @@ async def list_by_stock(
     return [_normalize_article(row) for row in rows]
 
 
+async def list_linked_stocks(
+    article_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    """Symbols and names linked to this article via stock_articles."""
+    rows = await db.fetch_all(
+        f"""
+        SELECT sq.symbol, sq.name
+        FROM {STOCK_ARTICLES_TABLE} sa
+        JOIN {QUOTES_TABLE} sq ON sa.stock_id = sq.stock_id
+        WHERE sa.article_id = $1::uuid
+        ORDER BY sq.symbol
+        """,
+        article_id,
+        conn=conn,
+    )
+    linked: list[dict[str, Any]] = []
+    for row in rows:
+        linked.append(
+            {
+                "symbol": str(row.get("symbol") or "").strip().upper(),
+                "name": str(row.get("name") or "").strip(),
+            }
+        )
+    return linked
+
+
 async def get_by_id(
     article_id: str,
     conn: Optional[asyncpg.Connection] = None,
@@ -172,6 +200,43 @@ async def get_by_id(
         conn=conn,
     )
     return _normalize_article(row) if row else None
+
+
+async def list_articles_needing_extract(
+    days: int = 7,
+    limit: int = 30,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    """Recent rows whose ``text`` is empty or still the provider blurb."""
+    rows = await db.fetch_all(
+        f"""
+        SELECT {_ARTICLE_COLUMNS}
+        FROM {ARTICLES_TABLE}
+        WHERE COALESCE(published_at, created_at)
+              >= NOW() - make_interval(days => $1::int)
+          AND url IS NOT NULL
+          AND BTRIM(url) <> ''
+          AND (
+            text IS NULL
+            OR BTRIM(text) = ''
+            OR char_length(BTRIM(text)) < {ARTICLE_EXTRACT_MIN_CHARS}
+            OR text ILIKE '%enable javascript%'
+            OR text = title
+            OR (provider_summary IS NOT NULL AND text = provider_summary)
+            OR (
+              title IS NOT NULL
+              AND provider_summary IS NOT NULL
+              AND text = title || E'\n\n' || provider_summary
+            )
+          )
+        ORDER BY published_at DESC NULLS LAST, created_at DESC
+        LIMIT $2
+        """,
+        max(1, int(days)),
+        max(1, int(limit)),
+        conn=conn,
+    )
+    return [_normalize_article(row) for row in rows]
 
 
 async def claim_for_summary(
@@ -195,6 +260,15 @@ async def claim_for_summary(
                 ai_summary_status = '{SUMMARY_STATUS_PENDING}'
                 AND ai_summary_started_at
                     < NOW() - INTERVAL '{_STALE_CLAIM_MINUTES} minutes'
+            )
+            OR (
+                ai_summary_status = '{SUMMARY_STATUS_READY}'
+                AND (
+                    text IS NULL
+                    OR BTRIM(text) = ''
+                    OR char_length(BTRIM(text)) < {ARTICLE_EXTRACT_MIN_CHARS}
+                    OR text ILIKE '%enable javascript%'
+                )
             )
           )
         RETURNING {_ARTICLE_COLUMNS}
@@ -255,6 +329,48 @@ async def set_summary(
         conn=conn,
     )
     return _normalize_article(row) if row else None
+
+
+async def list_recent_articles_by_symbol(
+    symbol: str,
+    days: int = 7,
+    limit: int = 10,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    """Stored news_articles rows for one ticker, including the text body."""
+    rows = await db.fetch_all(
+        f"""
+        SELECT na.article_id, sq.symbol, na.title, na.source, na.published_at, na.url,
+               na.text, na.ai_summary, na.provider_summary
+        FROM {ARTICLES_TABLE} na
+        JOIN {STOCK_ARTICLES_TABLE} sa ON na.article_id = sa.article_id
+        JOIN {QUOTES_TABLE} sq ON sa.stock_id = sq.stock_id
+        WHERE UPPER(sq.symbol) = UPPER($1)
+          AND na.published_at >= NOW() - make_interval(days => $2::int)
+        ORDER BY na.published_at DESC NULLS LAST
+        LIMIT $3
+        """,
+        symbol,
+        max(1, int(days)),
+        max(1, int(limit)),
+        conn=conn,
+    )
+    articles: list[dict[str, Any]] = []
+    for row in rows:
+        articles.append(
+            {
+                "article_id": str(row.get("article_id") or ""),
+                "symbol": str(row.get("symbol") or symbol).strip().upper(),
+                "title": str(row.get("title") or "").strip() or "Untitled",
+                "source": row.get("source"),
+                "published_at": _normalize_datetime(row.get("published_at")),
+                "url": row.get("url"),
+                "text": row.get("text"),
+                "ai_summary": row.get("ai_summary"),
+                "provider_summary": row.get("provider_summary"),
+            }
+        )
+    return articles
 
 
 async def list_recent_texts_by_symbol(

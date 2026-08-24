@@ -56,9 +56,9 @@ async def sync_stock_articles(
     tags=["Articles"],
     summary="Summarize one article (computed once, shared by all users)",
     description=(
-        "Atomically claims the article in `news_articles`. The winning caller extracts "
-        "text from the URL (falling back to the provider blurb), sends it to LiteLLM, "
-        "and stores `ai_summary` plus `text`. Concurrent callers get status=pending."
+        "Atomically claims the article in `news_articles`. Summarizes "
+        "`news_articles.text` for the linked stock name. If the article body "
+        "cannot be extracted, returns: Cannot extract the article."
     ),
     response_model=ArticleSummaryResponse,
     responses={

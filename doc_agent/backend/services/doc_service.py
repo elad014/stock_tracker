@@ -312,9 +312,19 @@ async def ask_document(
             "Failed to search document vectors",
         ) from exc
 
-    corpus = _join_chunk_matches(matches)
+    excerpts: list[str] = []
+    for row in matches:
+        content: str = str(row.get("content") or "").strip()
+        if not content:
+            continue
+        source_id: str = str(row.get("document_id") or "").strip()
+        if source_id:
+            excerpts.append(f"Source document: {source_id}\n{content}")
+        else:
+            excerpts.append(content)
+    corpus = _join_chunks(excerpts)
     if not corpus:
-        return AskResponse(answer=DOC_NOT_FOUND_ANSWER)
+        return AskResponse(answer=DOC_NOT_FOUND_ANSWER, excerpts=[])
 
     user_message = guarded_user_message(
         "Answer the query using only the document excerpts.",
@@ -339,7 +349,7 @@ async def ask_document(
     answer = result.content.strip()
     if not answer:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "LLM returned an empty answer")
-    return AskResponse(answer=answer)
+    return AskResponse(answer=answer, excerpts=excerpts)
 
 
 async def delete_document_vectors(user_id: str, document_id: str) -> DeleteVectorsResponse:

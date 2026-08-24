@@ -6,6 +6,7 @@ import { fetchStockArticles, summarizeStockArticle } from "../../services/stockS
 
 const POLL_INTERVAL_MS: number = 2000;
 const MAX_POLL_ATTEMPTS: number = 45;
+const CANNOT_EXTRACT_MESSAGE: string = "Cannot extract the article";
 
 interface StockNewsArticlesProps {
   stockId: string;
@@ -24,6 +25,18 @@ function formatPublishedAt(value: string | null): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function isUnusableSummary(article: StockArticle): boolean {
+  if (article.ai_summary_status === "failed") {
+    return true;
+  }
+  const summary: string = (article.ai_summary || "").toLowerCase();
+  return (
+    summary.includes("enable javascript") ||
+    summary.includes("javascript to continue") ||
+    summary.includes("cannot extract the article")
+  );
 }
 
 export default function StockNewsArticles({
@@ -139,6 +152,11 @@ export default function StockNewsArticles({
         {articles.map((article: StockArticle) => {
           const busy: boolean = busyIds.includes(article.article_id);
           const pending: boolean = busy || article.ai_summary_status === "pending";
+          const unusable: boolean = isUnusableSummary(article);
+          const showReadySummary: boolean =
+            article.ai_summary_status === "ready" &&
+            Boolean(article.ai_summary) &&
+            !unusable;
           const published: string = formatPublishedAt(article.published_at);
           return (
             <li key={article.article_id} className="stock-article-item">
@@ -157,17 +175,19 @@ export default function StockNewsArticles({
                 <p className="stock-article-blurb">{article.provider_summary}</p>
               ) : null}
 
-              {article.ai_summary ? (
+              {showReadySummary ? (
                 <p className="stock-article-ai-summary">{article.ai_summary}</p>
               ) : null}
 
-              {article.ai_summary_status === "failed" && !article.ai_summary ? (
+              {unusable ? (
                 <p className="control-error">
-                  Could not summarize this article. Try again.
+                  {article.ai_summary_status === "failed"
+                    ? article.ai_summary || CANNOT_EXTRACT_MESSAGE
+                    : CANNOT_EXTRACT_MESSAGE}
                 </p>
               ) : null}
 
-              {article.ai_summary ? null : (
+              {showReadySummary || pending ? null : (
                 <button
                   type="button"
                   className="btn-solid btn-compact"
