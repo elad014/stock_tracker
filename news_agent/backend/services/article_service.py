@@ -6,6 +6,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 
 from article_extractor import ArticleExtractor
+from constant import ARTICLE_EXTRACT_RETRY_LIMIT
 from db_logics import articles_db_logic as articles_db
 from llm_limits import article_summarize_limiter
 from llm_provider_client import LLMProviderClient
@@ -109,19 +110,13 @@ def _to_record(article: dict[str, Any]) -> ArticleRecord:
     )
 
 
-def _placeholder_body(article: dict[str, Any]) -> Optional[str]:
-    """Return Finnhub blurb, or None. Never use the headline as article body."""
-    blurb = str(article.get("provider_summary") or "").strip()
-    return blurb or None
-
-
 def _is_placeholder_text(article: dict[str, Any]) -> bool:
     """True when ``text`` is empty, the title, or title+blurb — not a full article."""
-    text = str(article.get("text") or "").strip()
+    text: str = str(article.get("text") or "").strip()
     if not text:
         return True
-    title = str(article.get("title") or "").strip()
-    blurb = str(article.get("provider_summary") or "").strip()
+    title: str = str(article.get("title") or "").strip()
+    blurb: str = str(article.get("provider_summary") or "").strip()
     if title and text == title:
         return True
     if title and blurb and text == f"{title}\n\n{blurb}":
@@ -132,27 +127,42 @@ def _is_placeholder_text(article: dict[str, Any]) -> bool:
 
 
 async def _ensure_article_body(article: dict[str, Any]) -> dict[str, Any]:
-    """Download the page and store readable body in ``text`` when missing."""
+    """Visit the article URL and store the extracted body in ``text``.
+
+    ``text`` is only the page body. Finnhub blurbs stay in ``provider_summary``.
+    If extraction fails, ``text`` is left NULL so a later run can retry.
+    """
     if not _is_placeholder_text(article):
         return article
 
-    url = str(article.get("url") or "").strip()
-    extracted = await _run_blocking(_extractor().extract, url) if url else None
+    url: str = str(article.get("url") or "").strip()
+    extracted: Optional[str] = (
+        await _run_blocking(_extractor().extract, url) if url else None
+    )
     if extracted:
-        updated = await articles_db.set_article_text(article["article_id"], extracted)
+        updated: Optional[dict[str, Any]] = await articles_db.set_article_text(
+            article["article_id"],
+            extracted,
+        )
+        logger.info(
+            "Extracted article text for %s (%s chars)",
+            article["article_id"],
+            len(extracted),
+        )
         return updated or article
 
-    current = str(article.get("text") or "").strip()
-    title = str(article.get("title") or "").strip()
-    blurb = str(article.get("provider_summary") or "").strip()
-    if (not current) or (title and current == title) or (
-        title and blurb and current == f"{title}\n\n{blurb}"
-    ):
-        repaired = await articles_db.set_article_text(
+    logger.info(
+        "Could not extract article text for %s (%s)",
+        article.get("article_id"),
+        url or "missing-url",
+    )
+    current: str = str(article.get("text") or "").strip()
+    if current:
+        cleared: Optional[dict[str, Any]] = await articles_db.set_article_text(
             article["article_id"],
-            _placeholder_body(article),
+            None,
         )
-        return repaired or article
+        return cleared or article
     return article
 
 
@@ -200,6 +210,34 @@ async def upsert_stock_articles(
         await asyncio.gather(*[fill(article) for article in pending])
     )
     return filled, new_count
+
+
+async def retry_missing_article_bodies(
+    days: int = 7,
+    limit: int = ARTICLE_EXTRACT_RETRY_LIMIT,
+) -> int:
+    """Visit article URLs again for rows that still have no extracted ``text``."""
+    pending: list[dict[str, Any]] = await articles_db.list_articles_needing_extract(
+        days=days,
+        limit=limit,
+    )
+    if not pending:
+        return 0
+
+    semaphore = asyncio.Semaphore(_EXTRACT_CONCURRENCY)
+
+    async def fill(article: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            return await _ensure_article_body(article)
+
+    filled: list[dict[str, Any]] = list(
+        await asyncio.gather(*[fill(article) for article in pending])
+    )
+    extracted: int = 0
+    for article in filled:
+        if not _is_placeholder_text(article):
+            extracted += 1
+    return extracted
 
 
 async def list_stock_articles(stock_id: str, limit: int = 100) -> list[ArticleRecord]:
@@ -294,10 +332,7 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
         if extracted_text:
             await articles_db.set_article_text(article_id, extracted_text)
         elif _is_placeholder_text(claimed):
-            await articles_db.set_article_text(
-                article_id,
-                _placeholder_body(claimed),
-            )
+            await articles_db.set_article_text(article_id, None)
 
         text = _summary_source(claimed, extracted_text)
         if not text.strip():

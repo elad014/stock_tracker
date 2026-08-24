@@ -38,6 +38,7 @@ ARTICLE_EXTRACT_TIMEOUT_SECONDS = 20.0
 ARTICLE_EXTRACT_MAX_BYTES = 2_000_000
 ARTICLE_EXTRACT_MAX_CHARS = 12_000
 ARTICLE_EXTRACT_MAX_REDIRECTS = 3
+ARTICLE_EXTRACT_RETRY_LIMIT = 30
 
 # ---------------------------------------------------------------------------
 # News article retention (calendar days, inclusive)

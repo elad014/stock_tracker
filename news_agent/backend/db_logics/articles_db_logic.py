@@ -174,6 +174,41 @@ async def get_by_id(
     return _normalize_article(row) if row else None
 
 
+async def list_articles_needing_extract(
+    days: int = 7,
+    limit: int = 30,
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    """Recent rows whose ``text`` is empty or still the provider blurb."""
+    rows = await db.fetch_all(
+        f"""
+        SELECT {_ARTICLE_COLUMNS}
+        FROM {ARTICLES_TABLE}
+        WHERE COALESCE(published_at, created_at)
+              >= NOW() - make_interval(days => $1::int)
+          AND url IS NOT NULL
+          AND BTRIM(url) <> ''
+          AND (
+            text IS NULL
+            OR BTRIM(text) = ''
+            OR text = title
+            OR (provider_summary IS NOT NULL AND text = provider_summary)
+            OR (
+              title IS NOT NULL
+              AND provider_summary IS NOT NULL
+              AND text = title || E'\n\n' || provider_summary
+            )
+          )
+        ORDER BY published_at DESC NULLS LAST, created_at DESC
+        LIMIT $2
+        """,
+        max(1, int(days)),
+        max(1, int(limit)),
+        conn=conn,
+    )
+    return [_normalize_article(row) for row in rows]
+
+
 async def claim_for_summary(
     article_id: str,
     conn: Optional[asyncpg.Connection] = None,

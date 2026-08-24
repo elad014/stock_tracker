@@ -103,6 +103,7 @@ class ArticleExtractor:
         if not html:
             return None
 
+        extracted: Optional[str] = None
         try:
             extracted = trafilatura.extract(
                 html,
@@ -111,6 +112,14 @@ class ArticleExtractor:
                 include_tables=False,
                 favor_precision=True,
             )
+            if not extracted:
+                extracted = trafilatura.extract(
+                    html,
+                    url=normalized,
+                    include_comments=False,
+                    include_tables=False,
+                    favor_recall=True,
+                )
         except Exception:
             logger.exception("Article extraction failed for %s", normalized)
             return None
