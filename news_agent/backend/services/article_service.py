@@ -6,7 +6,12 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 
 from article_extractor import ArticleExtractor
-from constant import ARTICLE_EXTRACT_RETRY_LIMIT
+from article_extractor.util import is_usable_article_text
+from constant import (
+    ARTICLE_CANNOT_EXTRACT_MESSAGE,
+    ARTICLE_EXTRACT_MIN_CHARS,
+    ARTICLE_EXTRACT_RETRY_LIMIT,
+)
 from db_logics import articles_db_logic as articles_db
 from llm_limits import article_summarize_limiter
 from llm_provider_client import LLMProviderClient
@@ -111,9 +116,9 @@ def _to_record(article: dict[str, Any]) -> ArticleRecord:
 
 
 def _is_placeholder_text(article: dict[str, Any]) -> bool:
-    """True when ``text`` is empty, the title, or title+blurb — not a full article."""
+    """True when ``text`` is empty, a bot/JS wall, the title, or the Finnhub blurb."""
     text: str = str(article.get("text") or "").strip()
-    if not text:
+    if not is_usable_article_text(text, ARTICLE_EXTRACT_MIN_CHARS):
         return True
     title: str = str(article.get("title") or "").strip()
     blurb: str = str(article.get("provider_summary") or "").strip()
@@ -286,22 +291,40 @@ async def sync_stock_articles(
     return ArticleSyncResponse(stock_id=stock_id, symbol=symbol, stored=len(stored))
 
 
-def _summary_source(article: dict[str, Any], extracted_text: Optional[str]) -> str:
-    """LLM input only. Does not decide what is stored in ``text``."""
-    if extracted_text:
-        return extracted_text
-    existing = str(article.get("text") or "").strip()
-    title = str(article.get("title") or "").strip()
-    if existing and existing != title:
-        return existing
-    provider_summary = str(article.get("provider_summary") or "").strip()
-    if provider_summary:
-        return f"{title}\n\n{provider_summary}" if title else provider_summary
-    return title
+def _stock_label(row: dict[str, Any]) -> str:
+    symbol: str = str(row.get("symbol") or "").strip().upper()
+    name: str = str(row.get("name") or "").strip()
+    if symbol and name and name.upper() != symbol:
+        return f"{name} ({symbol})"
+    return symbol or name
+
+
+def _linked_symbol_list(rows: list[dict[str, Any]]) -> Optional[str]:
+    tickers: list[str] = []
+    for row in rows:
+        symbol: str = str(row.get("symbol") or "").strip().upper()
+        if symbol and symbol not in tickers:
+            tickers.append(symbol)
+    if not tickers:
+        return None
+    return ", ".join(tickers)
+
+
+async def _mark_cannot_extract(article_id: str) -> ArticleSummaryResponse:
+    await articles_db.set_article_text(article_id, None)
+    updated: Optional[dict[str, Any]] = await articles_db.set_summary(
+        article_id,
+        ai_summary=ARTICLE_CANNOT_EXTRACT_MESSAGE,
+        ai_summary_status=STATUS_FAILED,
+        ai_summary_error=ARTICLE_CANNOT_EXTRACT_MESSAGE,
+    )
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
+    return _article_response(updated, extracted=False)
 
 
 async def summarize_article(article_id: str) -> ArticleSummaryResponse:
-    """Summarize one article exactly once, no matter how many users ask."""
+    """Summarize stored news_articles.text for the linked stock, once per article."""
     existing = await articles_db.get_by_id(article_id)
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
@@ -325,21 +348,37 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
         raise
     article_summarize_limiter.record("article-summarize")
 
-    extracted_text: Optional[str] = None
     try:
-        extractor = _extractor()
-        extracted_text = await _run_blocking(extractor.extract, claimed["url"])
-        if extracted_text:
-            await articles_db.set_article_text(article_id, extracted_text)
-        elif _is_placeholder_text(claimed):
-            await articles_db.set_article_text(article_id, None)
+        body: Optional[str] = None
+        if not _is_placeholder_text(claimed):
+            body = str(claimed.get("text") or "").strip()
+        else:
+            url: str = str(claimed.get("url") or "").strip()
+            extracted_text: Optional[str] = (
+                await _run_blocking(_extractor().extract, url) if url else None
+            )
+            if extracted_text:
+                await articles_db.set_article_text(article_id, extracted_text)
+                body = extracted_text
+            else:
+                await articles_db.set_article_text(article_id, None)
 
-        text = _summary_source(claimed, extracted_text)
-        if not text.strip():
-            raise RuntimeError("No article text available to summarize")
+        if not body:
+            return await _mark_cannot_extract(article_id)
 
-        result = await _llm_client().summarize(text, symbol=None)
-        content = result.content.strip()
+        linked: list[dict[str, Any]] = await articles_db.list_linked_stocks(article_id)
+        labels: list[str] = [
+            label for label in (_stock_label(row) for row in linked) if label
+        ]
+        source: str = body
+        if labels:
+            source = "Related stocks: " + ", ".join(labels) + "\n\n" + body
+
+        result = await _llm_client().summarize(
+            source,
+            symbol=_linked_symbol_list(linked),
+        )
+        content: str = result.content.strip()
         if not content:
             raise RuntimeError("LLM returned an empty summary")
 
@@ -348,16 +387,12 @@ async def summarize_article(article_id: str) -> ArticleSummaryResponse:
             ai_summary=content,
             ai_summary_status=STATUS_READY,
             ai_summary_model=result.model or None,
-            text=extracted_text,
+            text=body,
         )
         if updated is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Article not found")
-        logger.info(
-            "Summarized article %s (extracted=%s)",
-            article_id,
-            bool(extracted_text),
-        )
-        return _article_response(updated, extracted=bool(extracted_text))
+        logger.info("Summarized article %s from stored text", article_id)
+        return _article_response(updated, extracted=True)
     except HTTPException:
         raise
     except Exception as exc:

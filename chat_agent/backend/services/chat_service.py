@@ -62,8 +62,15 @@ def _build_chat_messages(
         {
             "role": "user",
             "content": guarded_user_message(
-                "Answer the user's message using tools when needed. "
-                "Search their documents even if they did not name a file.",
+                "Answer the user's message using only the tools that match "
+                "the question. News or articles: get_stock_news_summary "
+                "(returns analysis plus SOURCE EVIDENCE). Uploaded documents: "
+                "ask_user_document. The stock itself: get_stock_price. "
+                "If they ask about more than one of those, call every matching tool. "
+                "Compose the reply from SOURCE EVIDENCE, SOURCE EXCERPTS, and "
+                "quotes first. Treat other-agent answers as analysis only. "
+                "For factual article questions, use matching sentences. "
+                "Do not invent facts that are not in the tool results.",
                 ("USER_MESSAGE", user_message),
             ),
         }
@@ -141,7 +148,7 @@ async def _run_tool_loop(
     while result.tool_calls and rounds < CHAT_MAX_TOOL_ROUNDS:
         messages.append(_assistant_tool_message(result))
         for call in result.tool_calls:
-            output = await tools.execute(call.name, call.arguments)
+            output: str = await tools.execute(call.name, call.arguments)
             messages.append(
                 {
                     "role": "tool",

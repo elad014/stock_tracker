@@ -51,8 +51,9 @@ password, or `?api_key=`). They are not public.
 
 ## Swagger abilities
 1. **News** — `GET /news/{symbol}`: get Finnhub news for one stock (no LLM, no DB write)
-2. **Search** — `POST /api/v1/news/search-and-summarize`: answer a query from stored
-   article text for one ticker (last 7 days)
+2. **Search** — `POST /api/v1/news/search-and-summarize`: rank stored article
+   text for one ticker (last 7 days) and return matching sentences plus optional
+   LLM analysis
 3. **Agent** — `POST /jobs/news-update`: for every stock, fetch news -> summarize via LiteLLM -> HTTP update `stock_summery`
 4. **Articles** — `GET /stocks/{stock_id}/articles`, `POST /stocks/{stock_id}/articles/sync`,
    `POST /articles/{article_id}/summarize`

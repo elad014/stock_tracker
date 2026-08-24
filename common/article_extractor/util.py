@@ -13,6 +13,16 @@ _BLOCKED_HOSTNAMES = frozenset(
     }
 )
 _BLOCKED_HOSTNAME_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home")
+_BLOCKED_PAGE_MARKERS: tuple[str, ...] = (
+    "enable javascript",
+    "enable js to",
+    "please enable javascript",
+    "checking your browser",
+    "verify you are human",
+    "just a moment",
+    "attention required",
+    "access denied",
+)
 
 
 def clean_text(value: str) -> str:
@@ -25,6 +35,20 @@ def truncate(value: str, max_chars: int) -> str:
     if len(value) <= max_chars:
         return value
     return value[:max_chars].rstrip() + "..."
+
+
+def is_blocked_page_text(value: str) -> bool:
+    lowered: str = value.lower()
+    return any(marker in lowered for marker in _BLOCKED_PAGE_MARKERS)
+
+
+def is_usable_article_text(value: str, min_chars: int) -> bool:
+    text: str = value.strip()
+    if len(text) < min_chars:
+        return False
+    if is_blocked_page_text(text):
+        return False
+    return True
 
 
 def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:

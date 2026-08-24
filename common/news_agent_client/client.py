@@ -45,6 +45,21 @@ class NewsAgentClient:
             self._raise_from_response(response)
         return response.json()
 
+    async def get_stored_news(
+        self,
+        symbol: str,
+        limit: int = 8,
+    ) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self._base_url}/news/{symbol}/stored",
+                headers=self._headers(),
+                params={"limit": limit},
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
     async def sync_stock_articles(
         self,
         stock_id: str,
@@ -88,7 +103,7 @@ class NewsAgentClient:
             return []
         return payload
 
-    async def search_and_summarize(self, symbol: str, query: str) -> str:
+    async def search_and_summarize(self, symbol: str, query: str) -> dict[str, Any]:
         ticker: str = symbol.strip().upper()
         question: str = query.strip()
         if not ticker:
@@ -105,10 +120,14 @@ class NewsAgentClient:
         if response.status_code != 200:
             self._raise_from_response(response)
         payload = response.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(502, "News agent returned an invalid response")
         summary = str(payload.get("summary") or "").strip()
-        if not summary:
-            raise HTTPException(502, "News agent returned an empty summary")
-        return summary
+        articles = payload.get("articles")
+        has_articles = isinstance(articles, list) and bool(articles)
+        if not summary and not has_articles:
+            raise HTTPException(502, "News agent returned an empty response")
+        return payload
 
 
 news_agent_client = NewsAgentClient()
