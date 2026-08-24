@@ -20,7 +20,10 @@ class LLMCompletionResult:
 
 UNAVAILABLE_MARKERS: tuple[str, ...] = (
     "503",
+    "404",
     "unavailable",
+    "not found",
+    "no longer available",
     "high demand",
     "overloaded",
     "try again later",
@@ -33,6 +36,7 @@ UNAVAILABLE_MARKERS: tuple[str, ...] = (
 UNAVAILABLE_EXC_NAMES: frozenset[str] = frozenset(
     {
         "ServiceUnavailableError",
+        "NotFoundError",
         "RateLimitError",
         "APIConnectionError",
         "Timeout",

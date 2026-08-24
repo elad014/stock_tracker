@@ -3,8 +3,8 @@
 Used by chat-agent (orchestrator) and news-agent (summaries).
 
 Environment variables:
-- ``LLM_MODELS`` — comma-separated LiteLLM model ids, tried in order
-  (e.g. ``gemini/gemini-2.5-flash,gemini/gemini-2.5-flash-lite``)
+- ``LLM_MODELS`` — comma-separated LiteLLM model ids, tried in order until one
+  succeeds (e.g. ``gemini/gemini-2.5-flash,gemini/gemini-2.5-flash-lite``)
 - ``LLM_MODEL`` — optional legacy single model if ``LLM_MODELS`` is empty
 - ``LLM_MAX_TOKENS`` — optional default completion cap
 - ``LLM_SYSTEM_PROMPT`` — optional system message prepended to every call
@@ -70,28 +70,14 @@ class LLMProviderClient:
                 "LLM model missing. Set LLM_MODELS or LLM_MODEL in .env or pass model=..."
             )
 
+        if "/" not in normalized and normalized.startswith("gemini"):
+            normalized = f"gemini/{normalized}"
+
         if normalized in DEPRECATED_GEMINI_MODELS:
             logger.warning(
-                "Model %s is deprecated; using %s instead",
+                "Model %s is deprecated; still trying it because it is listed",
                 normalized,
-                DEFAULT_MODEL,
             )
-            return DEFAULT_MODEL
-
-        if "/" in normalized:
-            return normalized
-
-        if normalized.startswith("gemini"):
-            candidate = f"gemini/{normalized}"
-            if candidate in DEPRECATED_GEMINI_MODELS:
-                logger.warning(
-                    "Model %s is deprecated; using %s instead",
-                    candidate,
-                    DEFAULT_MODEL,
-                )
-                return DEFAULT_MODEL
-            return candidate
-
         return normalized
 
     def _extract_content(self, response: Any) -> str:
@@ -198,23 +184,20 @@ class LLMProviderClient:
             except Exception as exc:
                 failures.append(f"{candidate} ({type(exc).__name__}: {exc})")
                 has_next: bool = index < len(candidates) - 1
-                if has_next and is_model_unavailable(exc):
+                if has_next:
+                    reason: str = (
+                        "unavailable" if is_model_unavailable(exc) else "failed"
+                    )
                     logger.warning(
-                        "LLM model unavailable; trying next. Order so far: %s",
+                        "LLM model %s; trying next. Order so far: %s",
+                        reason,
                         " -> ".join(failures),
                     )
                     continue
-                if has_next:
-                    logger.error(
-                        "LLM model failed (not an availability error); "
-                        "not trying remaining. Order: %s",
-                        " -> ".join(failures),
-                    )
-                else:
-                    logger.error(
-                        "All LLM models unavailable. Order tried: %s",
-                        " -> ".join(failures),
-                    )
+                logger.error(
+                    "All LLM models failed. Order tried: %s",
+                    " -> ".join(failures),
+                )
                 raise RuntimeError(
                     "LLM vendor request failed. Order tried: "
                     + " -> ".join(failures)
