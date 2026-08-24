@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from constant import ARTICLE_RETENTION_DAYS
 from llm_limits import news_update_guard
@@ -61,6 +63,14 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _stamp_summary(content: str) -> str:
+    """Prefix the rollup with the local time this summary was written."""
+    tz_name: str = os.getenv("SCHEDULER_TIMEZONE", "Asia/Jerusalem")
+    created_at: datetime = datetime.now(ZoneInfo(tz_name))
+    stamp: str = created_at.strftime("%Y-%m-%d %H:%M")
+    return f"Created: {stamp}\n\n{content}"
+
+
 async def run_news_update() -> None:
     """Fetch today's Finnhub articles per stock, store them, update rollup summary.
 
@@ -68,7 +78,7 @@ async def run_news_update() -> None:
     1. List stocks from stock-manager (`stock_quotes`)
     2. Ask Finnhub for every article published today
     3. Upsert + link those articles in `news_articles` / `stock_articles`
-    4. Rebuild stock_summery from today's articles only (HTTP to stock-manager)
+    4. LLM + HTTP `stock_summery` only when this stock got new articles
     5. Delete articles older than ARTICLE_RETENTION_DAYS (summaries go with them)
     """
     stock_manager = _stock_manager_client()
@@ -101,8 +111,23 @@ async def run_news_update() -> None:
                 continue
 
             payload = to_article_payload(news_items)
+            new_count: int = 0
             if payload:
-                await upsert_stock_articles(stock_id, payload)
+                _stored, new_count = await upsert_stock_articles(stock_id, payload)
+
+            existing_summary = str(stock.get("stock_summery") or "").strip()
+            if new_count == 0 and existing_summary:
+                logger.info(
+                    "No new articles for %s on %s; skipping LLM",
+                    symbol,
+                    today,
+                )
+                continue
+            if new_count == 0 and not existing_summary:
+                logger.info(
+                    "No new articles for %s but stock_summery empty; summarizing",
+                    symbol,
+                )
 
             news_text = _build_news_text(news_items)
             summary_result = await llm_client.summarize(
@@ -112,10 +137,12 @@ async def run_news_update() -> None:
                 change=_to_float(stock.get("change")),
                 percent_change=_to_float(stock.get("percent_change")),
             )
-            content = summary_result.content.strip()
-            if not content:
+            raw_summary: str = summary_result.content.strip()
+            if not raw_summary:
                 logger.warning("Empty LLM summary for %s; skipping update", symbol)
                 continue
+
+            content: str = _stamp_summary(raw_summary)
 
             newest = _newest_published_at(news_items)
             published_iso = newest.isoformat() if newest is not None else None
@@ -125,9 +152,10 @@ async def run_news_update() -> None:
                 stock_news_published_at=published_iso,
             )
             logger.info(
-                "Updated summary for %s (today_articles=%s, published_at=%s)",
+                "Updated summary for %s (today_articles=%s, new=%s, published_at=%s)",
                 symbol,
                 len(news_items),
+                new_count,
                 published_iso,
             )
         except Exception:

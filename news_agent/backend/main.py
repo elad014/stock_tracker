@@ -22,7 +22,16 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+# Default misfire_grace_time is 1s. Docker Desktop / a busy event loop
+# routinely wakes the scheduler a few seconds late, and APScheduler then
+# skips the job (logs "Run time of job ... was missed by 0:00:01").
+scheduler = AsyncIOScheduler(
+    job_defaults={
+        "coalesce": True,
+        "max_instances": 1,
+        "misfire_grace_time": 300,
+    },
+)
 
 API_DESCRIPTION = """
 Internal News Agent for stock_tracker.

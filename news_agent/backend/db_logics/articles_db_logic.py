@@ -77,8 +77,12 @@ async def upsert_article(
     provider_summary: Optional[str] = None,
     text: Optional[str] = None,
     conn: Optional[asyncpg.Connection] = None,
-) -> dict[str, Any]:
-    """Insert or refresh an article by URL. Never overwrites a stored full text body."""
+) -> tuple[dict[str, Any], bool]:
+    """Insert or refresh an article by URL. Never overwrites a stored full text body.
+
+    The bool is True only on a real INSERT (xmax = 0). ON CONFLICT updates
+    return False so callers can skip repeat LLM work.
+    """
     row = await db.fetch_one(
         f"""
         INSERT INTO {ARTICLES_TABLE} (
@@ -96,7 +100,7 @@ async def upsert_article(
                 EXCLUDED.provider_summary, {ARTICLES_TABLE}.provider_summary
             ),
             text = COALESCE({ARTICLES_TABLE}.text, EXCLUDED.text)
-        RETURNING {_ARTICLE_COLUMNS}
+        RETURNING {_ARTICLE_COLUMNS}, (xmax = 0) AS inserted
         """,
         str(uuid4()),
         hash_url(url),
@@ -110,24 +114,27 @@ async def upsert_article(
         conn=conn,
     )
     assert row is not None
-    return _normalize_article(row)
+    return _normalize_article(row), bool(row["inserted"])
 
 
 async def link_article_to_stock(
     stock_id: str,
     article_id: str,
     conn: Optional[asyncpg.Connection] = None,
-) -> None:
-    await db.execute(
+) -> bool:
+    """True when this stock was not already linked to the article."""
+    row = await db.fetch_one(
         f"""
         INSERT INTO {STOCK_ARTICLES_TABLE} (stock_id, article_id)
         VALUES ($1::uuid, $2::uuid)
         ON CONFLICT (stock_id, article_id) DO NOTHING
+        RETURNING article_id
         """,
         stock_id,
         article_id,
         conn=conn,
     )
+    return row is not None
 
 
 async def list_by_stock(
