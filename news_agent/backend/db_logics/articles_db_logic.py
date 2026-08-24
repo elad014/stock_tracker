@@ -379,23 +379,18 @@ async def list_recent_texts_by_symbol(
     conn: Optional[asyncpg.Connection] = None,
 ) -> list[str]:
     """Read article bodies for one ticker. Joins quotes read-only to filter by symbol."""
-    rows = await db.fetch_all(
-        f"""
-        SELECT na.text
-        FROM {ARTICLES_TABLE} na
-        JOIN {STOCK_ARTICLES_TABLE} sa ON na.article_id = sa.article_id
-        JOIN {QUOTES_TABLE} sq ON sa.stock_id = sq.stock_id
-        WHERE UPPER(sq.symbol) = UPPER($1)
-          AND na.published_at >= NOW() - make_interval(days => $2::int)
-          AND na.text IS NOT NULL
-          AND BTRIM(na.text) <> ''
-        ORDER BY na.published_at DESC NULLS LAST
-        """,
+    articles: list[dict[str, Any]] = await list_recent_articles_by_symbol(
         symbol,
-        max(1, int(days)),
+        days=days,
+        limit=200,
         conn=conn,
     )
-    return [str(row["text"]) for row in rows if row.get("text")]
+    texts: list[str] = []
+    for article in articles:
+        body: str = str(article.get("text") or "").strip()
+        if body:
+            texts.append(body)
+    return texts
 
 
 async def delete_older_than(
