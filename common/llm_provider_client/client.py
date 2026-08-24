@@ -3,12 +3,12 @@
 Used by chat-agent (orchestrator) and news-agent (summaries).
 
 Environment variables:
-- ``LLM_MODEL`` — default LiteLLM model id
-  (e.g. ``gemini/gemini-2.5-flash``, ``openai/gpt-4o-mini``,
-  ``anthropic/claude-3-5-sonnet-latest``)
+- ``LLM_MODELS`` — comma-separated LiteLLM model ids, tried in order
+  (e.g. ``gemini/gemini-2.5-flash,gemini/gemini-2.5-flash-lite``)
+- ``LLM_MODEL`` — optional legacy single model if ``LLM_MODELS`` is empty
 - ``LLM_MAX_TOKENS`` — optional default completion cap
 - ``LLM_SYSTEM_PROMPT`` — optional system message prepended to every call
-- Provider keys (set the ones that match ``LLM_MODEL``):
+- Provider keys (set the ones that match the models):
   ``GEMINI_API_KEY``, ``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``
 """
 
@@ -23,7 +23,12 @@ from litellm import acompletion
 
 from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS, NEWS_SUMMARIZE_SYSTEM_PROMPT
 from llm_guard import guarded_user_message
-from llm_provider_client.util import LLMCompletionResult, LLMToolCall
+from llm_provider_client.util import (
+    LLMCompletionResult,
+    LLMToolCall,
+    is_model_unavailable,
+    split_model_ids,
+)
 
 load_dotenv()
 
@@ -34,15 +39,35 @@ class LLMProviderClient:
     """LiteLLM vendor client used by chat-agent and news-agent."""
 
     def __init__(self, model: str | None = None) -> None:
-        configured = (model or os.getenv("LLM_MODEL", "")).strip()
-        self.model: str = self._normalize_model(configured or DEFAULT_MODEL)
+        env_models: list[str] = self._models_from_env()
+        if model is not None:
+            preferred: str = self._normalize_model(model)
+            self.models: list[str] = [preferred] + [
+                item for item in env_models if item != preferred
+            ]
+        else:
+            self.models = env_models
+        self.model: str = self.models[0]
+
+    @classmethod
+    def _models_from_env(cls) -> list[str]:
+        listed: list[str] = split_model_ids(os.getenv("LLM_MODELS", ""))
+        if listed:
+            unique: list[str] = []
+            for item in listed:
+                normalized: str = cls._normalize_model(item)
+                if normalized not in unique:
+                    unique.append(normalized)
+            return unique
+        configured: str = os.getenv("LLM_MODEL", "").strip()
+        return [cls._normalize_model(configured or DEFAULT_MODEL)]
 
     @staticmethod
     def _normalize_model(model: str) -> str:
         normalized = model.strip()
         if not normalized:
             raise ValueError(
-                "LLM model missing. Set LLM_MODEL in .env or pass model=..."
+                "LLM model missing. Set LLM_MODELS or LLM_MODEL in .env or pass model=..."
             )
 
         if normalized in DEPRECATED_GEMINI_MODELS:
@@ -133,11 +158,15 @@ class LLMProviderClient:
         if not messages:
             raise ValueError("messages must not be empty")
 
-        resolved_model = (
-            self._normalize_model(model) if model is not None else self.model
-        )
+        if model is not None:
+            preferred: str = self._normalize_model(model)
+            candidates: list[str] = [preferred] + [
+                item for item in self.models if item != preferred
+            ]
+        else:
+            candidates = list(self.models)
+
         kwargs: dict[str, Any] = {
-            "model": resolved_model,
             "messages": messages,
         }
         if temperature is not None:
@@ -151,11 +180,45 @@ class LLMProviderClient:
         if tool_choice is not None:
             kwargs["tool_choice"] = tool_choice
 
-        try:
-            response = await acompletion(**kwargs)
-        except Exception as exc:
-            logger.exception("LiteLLM chat completion failed")
-            raise RuntimeError(f"LLM vendor request failed: {exc}") from exc
+        response: Any = None
+        used_model: str = candidates[0]
+        failures: list[str] = []
+        for index, candidate in enumerate(candidates):
+            try:
+                kwargs["model"] = candidate
+                response = await acompletion(**kwargs)
+                used_model = candidate
+                if failures:
+                    logger.warning(
+                        "LLM fallback succeeded. Order: failed [%s] then %s",
+                        " -> ".join(failures),
+                        candidate,
+                    )
+                break
+            except Exception as exc:
+                failures.append(f"{candidate} ({type(exc).__name__}: {exc})")
+                has_next: bool = index < len(candidates) - 1
+                if has_next and is_model_unavailable(exc):
+                    logger.warning(
+                        "LLM model unavailable; trying next. Order so far: %s",
+                        " -> ".join(failures),
+                    )
+                    continue
+                if has_next:
+                    logger.error(
+                        "LLM model failed (not an availability error); "
+                        "not trying remaining. Order: %s",
+                        " -> ".join(failures),
+                    )
+                else:
+                    logger.error(
+                        "All LLM models unavailable. Order tried: %s",
+                        " -> ".join(failures),
+                    )
+                raise RuntimeError(
+                    "LLM vendor request failed. Order tried: "
+                    + " -> ".join(failures)
+                ) from exc
 
         prompt_tokens, completion_tokens, total_tokens = self._extract_usage(response)
         tool_calls = self._extract_tool_calls(response)
@@ -164,7 +227,7 @@ class LLMProviderClient:
             raise RuntimeError("LLM vendor returned an empty response")
         return LLMCompletionResult(
             content=content,
-            model=getattr(response, "model", None) or resolved_model,
+            model=getattr(response, "model", None) or used_model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,

@@ -6,7 +6,6 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 
 from constant import (
-    DOC_CHAT_MODEL,
     DOC_CHUNK_CHARS,
     DOC_CHUNK_OVERLAP,
     DOC_ALL_DOCS_TOP_K,
@@ -47,7 +46,7 @@ def _embedding_client() -> EmbeddingClient:
 
 
 def _llm_client() -> LLMProviderClient:
-    return LLMProviderClient(model=DOC_CHAT_MODEL)
+    return LLMProviderClient()
 
 
 def _normalize_document_id(document_id: str) -> str:
