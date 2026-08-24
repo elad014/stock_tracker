@@ -23,9 +23,11 @@ router = APIRouter(
         "1. List stocks from stock-manager\n"
         "2. Fetch **all** Finnhub articles published **today** for that stock\n"
         "3. Upsert those articles locally into `news_articles` / `stock_articles`\n"
-        "4. Rebuild `stock_summery` via HTTP `PUT /stocks/{stock_id}/summary`\n"
+        "4. LLM + `PUT /stocks/{stock_id}/summary` only if this stock got **new** articles "
+        "(same Finnhub set as last hour skips Gemini)\n"
         "5. Delete articles older than 7 days (AI summaries deleted with them)\n\n"
-        "Stocks with no news today are skipped. Failures on one stock do not stop the rest.\n\n"
+        "Stocks with no news today, or with no new URLs, skip the LLM. "
+        "Failures on one stock do not stop the rest.\n\n"
         "The hourly scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
         "and at most once per 15 minutes, so a stolen key cannot loop LLM spend."
     ),

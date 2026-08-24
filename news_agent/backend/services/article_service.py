@@ -159,15 +159,20 @@ async def _ensure_article_body(article: dict[str, Any]) -> dict[str, Any]:
 async def upsert_stock_articles(
     stock_id: str,
     articles: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Insert/update news_articles, link them, and fill ``text`` from the URL."""
+) -> tuple[list[dict[str, Any]], int]:
+    """Insert/update news_articles, link them, and fill ``text`` from the URL.
+
+    The int is how many articles were new for this stock (fresh URL row or
+    first link to this ticker). Repeat Finnhub rows do not count.
+    """
     pending: list[dict[str, Any]] = []
+    new_count: int = 0
     for item in articles:
         url = str(item.get("url") or "").strip()
         title = str(item.get("title") or "").strip()
         if not url or not title:
             continue
-        article = await articles_db.upsert_article(
+        article, inserted = await articles_db.upsert_article(
             url=url,
             title=title,
             source=item.get("source"),
@@ -175,11 +180,15 @@ async def upsert_stock_articles(
             provider=str(item.get("provider") or "finnhub"),
             provider_summary=item.get("provider_summary"),
         )
-        await articles_db.link_article_to_stock(stock_id, article["article_id"])
+        linked: bool = await articles_db.link_article_to_stock(
+            stock_id, article["article_id"]
+        )
+        if inserted or linked:
+            new_count += 1
         pending.append(article)
 
     if not pending:
-        return []
+        return [], 0
 
     semaphore = asyncio.Semaphore(_EXTRACT_CONCURRENCY)
 
@@ -187,7 +196,10 @@ async def upsert_stock_articles(
         async with semaphore:
             return await _ensure_article_body(article)
 
-    return list(await asyncio.gather(*[fill(article) for article in pending]))
+    filled: list[dict[str, Any]] = list(
+        await asyncio.gather(*[fill(article) for article in pending])
+    )
+    return filled, new_count
 
 
 async def list_stock_articles(stock_id: str, limit: int = 100) -> list[ArticleRecord]:
@@ -230,7 +242,9 @@ async def sync_stock_articles(
         ) from exc
 
     payload = to_article_payload(items)
-    stored = await upsert_stock_articles(stock_id, payload) if payload else []
+    stored, _new_count = (
+        await upsert_stock_articles(stock_id, payload) if payload else ([], 0)
+    )
     return ArticleSyncResponse(stock_id=stock_id, symbol=symbol, stored=len(stored))
 
 
