@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 
@@ -10,6 +10,9 @@ from news_agent_client import news_agent_client as news_agent
 from stock_manager_client import stock_manager_client as stock_manager
 
 logger = logging.getLogger(__name__)
+
+_HISTORY_RANGES: tuple[str, ...] = ("1D", "5D", "1M", "3M", "6M", "1Y", "5Y")
+_HISTORY_TAIL: int = 10
 
 CHAT_TOOLS: list[dict[str, Any]] = [
     {
@@ -88,6 +91,35 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                     "symbol": {
                         "type": "string",
                         "description": "Stock ticker symbol, for example AAPL",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_history",
+            "description": (
+                "Get daily OHLCV history for a ticker from stock-manager "
+                "(not live Twelve Data). Use this for trends and to explain "
+                "whether the stock is up or down over a window. "
+                "range must be one of: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Stock ticker symbol, for example AAPL",
+                    },
+                    "range": {
+                        "type": "string",
+                        "description": (
+                            "History window: 1D, 5D, 1M, 3M, 6M, 1Y, or 5Y. "
+                            "Default 1M. Use 5D for short-term why-up/why-down."
+                        ),
                     },
                 },
                 "required": ["symbol"],
@@ -243,6 +275,75 @@ def _format_quote(payload: dict[str, Any]) -> str:
     return ". ".join(parts)
 
 
+def _to_float(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_range(range_key: str) -> str:
+    normalized: str = range_key.strip().upper()
+    if normalized in _HISTORY_RANGES:
+        return normalized
+    return "1M"
+
+
+def _history_bar_date(item: tuple[str, float]) -> str:
+    return item[0]
+
+
+def _format_history(symbol: str, range_key: str, bars: list[dict[str, Any]]) -> str:
+    if not bars:
+        return f"No history found for {symbol} ({range_key})."
+
+    closes: list[tuple[str, float]] = []
+    high_close: Optional[tuple[str, float]] = None
+    low_close: Optional[tuple[str, float]] = None
+    for bar in bars:
+        if not isinstance(bar, dict):
+            continue
+        bar_date: str = str(bar.get("date") or "").strip()
+        close: Optional[float] = _to_float(bar.get("close"))
+        if not bar_date or close is None:
+            continue
+        closes.append((bar_date, close))
+        if high_close is None or close > high_close[1]:
+            high_close = (bar_date, close)
+        if low_close is None or close < low_close[1]:
+            low_close = (bar_date, close)
+
+    if not closes:
+        return f"No usable history closes for {symbol} ({range_key})."
+
+    closes.sort(key=_history_bar_date)
+    start_date, start_close = closes[0]
+    end_date, end_close = closes[-1]
+    window_change: Optional[float] = None
+    if start_close != 0:
+        window_change = ((end_close - start_close) / start_close) * 100.0
+
+    lines: list[str] = [
+        f"History for {symbol} ({range_key}): {len(closes)} daily bars "
+        f"from {start_date} to {end_date}.",
+        f"Start close: {start_close}. End close: {end_close}.",
+    ]
+    if window_change is not None:
+        lines.append(f"Window change: {window_change:.2f}%.")
+    if high_close is not None and low_close is not None:
+        lines.append(
+            f"Period high close: {high_close[1]} on {high_close[0]}. "
+            f"Period low close: {low_close[1]} on {low_close[0]}."
+        )
+    tail: list[tuple[str, float]] = closes[-_HISTORY_TAIL:]
+    lines.append("Recent daily closes (date close):")
+    for bar_date, close in tail:
+        lines.append(f"{bar_date} {close}")
+    return "\n".join(lines)
+
+
 class ChatTools:
     """Execute orchestrator tools with the requesting user's identity bound."""
 
@@ -297,6 +398,31 @@ class ChatTools:
             return f"No quote payload returned for {ticker}."
         return _format_quote(payload)
 
+    async def get_stock_history(self, symbol: str, range_key: str) -> str:
+        ticker: str = symbol.strip().upper()
+        if not ticker:
+            return "symbol is required."
+        window: str = _normalize_range(range_key)
+        try:
+            quote: Optional[dict[str, Any]] = await stock_manager.get_stock_by_symbol(
+                ticker
+            )
+            if quote is None:
+                return f"Symbol not found: {ticker}."
+            stock_id: str = str(quote.get("stock_id") or "")
+            if not stock_id:
+                return f"Symbol not found: {ticker}."
+            bars: Any = await stock_manager.get_stock_history(stock_id, window)
+        except Exception as exc:
+            logger.exception("get_stock_history failed for %s", ticker)
+            return _tool_error(exc)
+        if not isinstance(bars, list):
+            return f"No history payload returned for {ticker}."
+        typed_bars: list[dict[str, Any]] = [
+            bar for bar in bars if isinstance(bar, dict)
+        ]
+        return _format_history(ticker, window, typed_bars)
+
     async def execute(self, name: str, arguments_json: str) -> str:
         try:
             args: Any = json.loads(arguments_json or "{}")
@@ -317,4 +443,9 @@ class ChatTools:
             )
         if name == "get_stock_price":
             return await self.get_stock_price(str(args.get("symbol") or ""))
+        if name == "get_stock_history":
+            return await self.get_stock_history(
+                str(args.get("symbol") or ""),
+                str(args.get("range") or "1M"),
+            )
         return f"Unknown tool: {name}"
