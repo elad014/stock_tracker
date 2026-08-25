@@ -1,4 +1,6 @@
 import os
+import re
+from re import Pattern
 
 from llm_guard.prompt import compose_system_prompt
 
@@ -19,6 +21,11 @@ DOC_AGENT_URL = os.getenv("DOC_AGENT_URL", "http://localhost:8004").rstrip("/")
 # ---------------------------------------------------------------------------
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key"
+
+# ---------------------------------------------------------------------------
+# Ticker symbols (AAPL, BRK.A)
+# ---------------------------------------------------------------------------
+TICKER_PATTERN: Pattern[str] = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z])?$")
 
 # ---------------------------------------------------------------------------
 # External provider base URLs

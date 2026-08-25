@@ -1,8 +1,4 @@
-from pydantic import BaseModel, Field
-
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., examples=["ok"])
+from pydantic import BaseModel
 
 
 class JobTriggerResponse(BaseModel):

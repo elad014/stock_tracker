@@ -47,7 +47,3 @@ class ChatResponse(BaseModel):
 class SessionClearResponse(BaseModel):
     user_id: str
     message: str
-
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., examples=["ok"])
