@@ -45,7 +45,7 @@ from constant import (
     S3_RESPONSE_CHECKSUM,
     S3_SIGNATURE_VERSION,
 )
-from object_storage_client.util import (
+from .util import (
     ObjectStorageError,
     StoredObject,
     folder_name,

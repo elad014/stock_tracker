@@ -19,7 +19,7 @@ from db_logics.user_db_logic import (
     update_password,
     update_user_fields,
 )
-from email_client import mailer
+from clients.email_client import mailer
 from models.auth import (
     LoginRequest,
     MessageResponse,

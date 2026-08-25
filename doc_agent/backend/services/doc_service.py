@@ -17,21 +17,21 @@ from constant import (
     DOC_RAG_SYSTEM_PROMPT,
     DOC_TOP_K,
 )
-from database_client import db
+from clients.database_client import db
 from db_logics import ingest_events_db_logic as ingest_events_db
 from db_logics import vectors_db_logic as vectors_db
-from embedding_client import EmbeddingClient
+from clients.embedding_client import EmbeddingClient
 from llm_guard import guarded_user_message
 from llm_limits import ask_limiter, ingest_limiter
-from llm_provider_client import LLMProviderClient
+from clients.llm_provider_client import LLMProviderClient
 from models.docs import (
     AskResponse,
     DeleteVectorsResponse,
     IngestResponse,
     PurgeUserResponse,
 )
-from object_storage_client import ObjectStorageClient, ObjectStorageError, is_placeholder_key
-from object_storage_client.util import normalize_key
+from clients.object_storage_client import ObjectStorageClient, ObjectStorageError, is_placeholder_key
+from clients.object_storage_client.util import normalize_key
 from services.chunker import chunk_extracted_document
 from services.pdf_extractor import PdfExtractError, extract_pdf_blocks
 

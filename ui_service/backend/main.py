@@ -12,8 +12,8 @@ from starlette.responses import Response
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common"))
 
-from database_client import db
-from object_storage_client import ObjectStorageError
+from clients.database_client import db
+from clients.object_storage_client import ObjectStorageError
 from routers.admin_routes import router as admin_router
 from routers.auth_routes import router as auth_router
 from routers.chat_routes import router as chat_router

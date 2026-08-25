@@ -6,10 +6,10 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import HTTPException, UploadFile, status
 
-from doc_agent_client import doc_agent_client as doc_agent
+from clients.doc_agent_client import doc_agent_client as doc_agent
 from models.auth import MessageResponse
 from models.documents import DocumentTree, DownloadUrlResponse, TreeNode
-from object_storage_client import (
+from clients.object_storage_client import (
     ObjectStorageClient,
     ObjectStorageError,
     StoredObject,
