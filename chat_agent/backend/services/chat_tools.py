@@ -5,9 +5,9 @@ from typing import Any, Optional
 from fastapi import HTTPException
 
 from constant import CHAT_NEWS_ARTICLE_CHARS, CHAT_NEWS_MAX_ARTICLES
-from doc_agent_client import doc_agent_client as doc_agent
-from news_agent_client import news_agent_client as news_agent
-from stock_manager_client import stock_manager_client as stock_manager
+from clients.doc_agent_client import doc_agent_client as doc_agent
+from clients.news_agent_client import news_agent_client as news_agent
+from clients.stock_manager_client import stock_manager_client as stock_manager
 
 logger = logging.getLogger(__name__)
 

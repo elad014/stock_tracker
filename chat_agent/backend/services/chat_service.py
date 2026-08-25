@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from constant import CHAT_MAX_TOOL_ROUNDS, CHAT_ORCHESTRATOR_SYSTEM_PROMPT
 from llm_guard import guarded_user_message
 from llm_limits import chat_limiter
-from llm_provider_client import LLMCompletionResult, LLMProviderClient
+from clients.llm_provider_client import LLMCompletionResult, LLMProviderClient
 from models.chat import ChatRequest, ChatResponse, ChatUsage
 from services.chat_tools import CHAT_TOOLS, ChatTools
 from services.session_store import session_store

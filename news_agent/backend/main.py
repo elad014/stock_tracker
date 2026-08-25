@@ -6,7 +6,7 @@ from typing import AsyncIterator
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from database_client import db
+from clients.database_client import db
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from jobs.news_update import run_scheduled_news_update
 from routers.articles_routes import router as articles_router

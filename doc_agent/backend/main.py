@@ -5,7 +5,7 @@ from typing import AsyncIterator
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from database_client import db
+from clients.database_client import db
 from db_logics.schema_init import ensure_vector_schema
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from routers.docs_routes import router as docs_router

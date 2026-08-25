@@ -1,7 +1,7 @@
 import logging
 from datetime import date, timedelta
 
-from database_client import db
+from clients.database_client import db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
 from job_limits import daily_update_guard

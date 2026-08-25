@@ -3,8 +3,8 @@ from typing import Any, Optional, Sequence
 
 import asyncpg
 
-from database_client import db
-from stock_provider_client import OHLCVBar
+from clients.database_client import db
+from clients.stock_provider_client import OHLCVBar
 
 HISTORY_TABLE = "stock_history"
 

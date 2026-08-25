@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from database_client import db
+from clients.database_client import db
 
 ARCHIVE_TABLE = "stock_history_archive"
 HISTORY_TABLE = "stock_history"

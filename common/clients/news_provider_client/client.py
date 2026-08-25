@@ -14,7 +14,7 @@ import requests
 from dotenv import load_dotenv
 
 from constant import FINNHUB_BASE_URL
-from news_provider_client.util import NewsItem, parse_unix_datetime, to_optional_str
+from .util import NewsItem, parse_unix_datetime, to_optional_str
 
 load_dotenv()
 

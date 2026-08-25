@@ -14,10 +14,10 @@ from constant import (
 )
 from db_logics import articles_db_logic as articles_db
 from llm_limits import article_summarize_limiter
-from llm_provider_client import LLMProviderClient
+from clients.llm_provider_client import LLMProviderClient
 from models.articles import ArticleRecord, ArticleSummaryResponse, ArticleSyncResponse
-from news_provider_client import NewsItem, NewsProviderClient
-from stock_manager_client import StockManagerClient
+from clients.news_provider_client import NewsItem, NewsProviderClient
+from clients.stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 from typing import Any, Optional
 from uuid import uuid4
 
-from database_client import db
+from clients.database_client import db
 
 TABLE = "user_auth_data"
 _UNSET: Any = object()

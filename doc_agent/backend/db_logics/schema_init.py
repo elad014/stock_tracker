@@ -7,7 +7,7 @@ source of truth and runs from the FastAPI lifespan on startup.
 import logging
 
 from constant import EMBEDDING_DIMENSIONS
-from database_client import db
+from clients.database_client import db
 
 logger = logging.getLogger(__name__)
 

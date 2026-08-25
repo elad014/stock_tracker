@@ -4,7 +4,7 @@ from typing import Optional
 import asyncpg
 
 from constant import DOC_INGEST_WEEK_DAYS
-from database_client import db
+from clients.database_client import db
 
 INGEST_QUOTA_TABLE = "document_ingest_quota"
 
