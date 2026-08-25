@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from deps import verify_internal_api_key
+from internal_auth import verify_internal_api_key
 from jobs.news_update import run_news_update
 from llm_limits import news_update_guard
 from models.jobs import JobTriggerResponse

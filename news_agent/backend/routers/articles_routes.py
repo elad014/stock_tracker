@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Path, Query
 
-from deps import verify_internal_api_key
+from internal_auth import verify_internal_api_key
 from models.articles import ArticleRecord, ArticleSummaryResponse, ArticleSyncResponse, MessageResponse
 import services.article_service as article_service
 

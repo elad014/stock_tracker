@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Path
 
-from deps import verify_internal_api_key
+from internal_auth import verify_internal_api_key
 from models.chat import ChatRequest, ChatResponse, SessionClearResponse
 import services.chat_service as chat_service
 

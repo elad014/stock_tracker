@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Path, Query, status
 
-from deps import verify_internal_api_key
+from internal_auth import verify_internal_api_key
 from job_limits import cleanup_archive_guard, daily_update_guard
 from jobs.cleanup_archive import run_cleanup_archive
 from jobs.daily_update import run_daily_update

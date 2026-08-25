@@ -1,8 +1,6 @@
 """Protect FastAPI /docs, /redoc, and /openapi.json with the internal API key."""
 
 import base64
-import hmac
-import os
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -10,6 +8,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from constant import INTERNAL_API_KEY_HEADER
+from internal_auth import expected_internal_api_key, internal_api_key_matches
 
 DOCS_PATH = "/docs"
 REDOC_PATH = "/redoc"
@@ -24,26 +23,6 @@ def disabled_docs_kwargs() -> dict[str, None]:
         "redoc_url": None,
         "openapi_url": None,
     }
-
-
-def _expected_key() -> str:
-    expected = os.getenv("INTERNAL_API_KEY", "").strip()
-    if not expected:
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "INTERNAL_API_KEY is not configured",
-        )
-    return expected
-
-
-def _key_matches(provided: str | None, expected: str) -> bool:
-    if provided is None:
-        return False
-    provided_bytes = provided.encode("utf-8")
-    expected_bytes = expected.encode("utf-8")
-    if len(provided_bytes) != len(expected_bytes):
-        return False
-    return hmac.compare_digest(provided_bytes, expected_bytes)
 
 
 def _password_from_basic(authorization: str) -> str | None:
@@ -74,9 +53,9 @@ def extract_docs_api_key(request: Request) -> str | None:
 
 
 def require_docs_key(request: Request) -> str:
-    expected = _expected_key()
+    expected = expected_internal_api_key()
     provided = extract_docs_api_key(request)
-    if not _key_matches(provided, expected):
+    if not internal_api_key_matches(provided, expected):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Invalid internal API key",
