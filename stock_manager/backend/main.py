@@ -3,31 +3,19 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
-from zoneinfo import ZoneInfo
 
 from database_client import db
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from jobs.cleanup_archive import run_scheduled_cleanup_archive
 from jobs.daily_update import run_scheduled_daily_update
-from models.stocks import HealthResponse
 from routers.stocks_routes import router as stocks_router
+from utils import make_scheduler, mount_health, parse_cron
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Default misfire_grace_time is 1s. Docker Desktop / a busy event loop
-# routinely wakes the scheduler a few seconds late, and APScheduler then
-# skips the job (logs "Run time of job ... was missed by 0:00:01").
-scheduler = AsyncIOScheduler(
-    job_defaults={
-        "coalesce": True,
-        "max_instances": 1,
-        "misfire_grace_time": 300,
-    },
-)
+scheduler = make_scheduler()
 
 API_DESCRIPTION = """
 Internal Stock Manager service for stock_tracker.
@@ -51,21 +39,6 @@ Use the **Authorize** button in Swagger and paste the same key configured in `.e
 """
 
 
-def _parse_cron(expr: str, timezone: str) -> CronTrigger:
-    parts = expr.split()
-    if len(parts) != 5:
-        raise ValueError(f"Expected 5-field cron expression, got: {expr}")
-    minute, hour, day, month, day_of_week = parts
-    return CronTrigger(
-        minute=minute,
-        hour=hour,
-        day=day,
-        month=month,
-        day_of_week=day_of_week,
-        timezone=ZoneInfo(timezone),
-    )
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     tz = os.getenv("SCHEDULER_TIMEZONE", "America/New_York")
@@ -74,13 +47,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     scheduler.add_job(
         run_scheduled_daily_update,
-        trigger=_parse_cron(daily_cron, tz),
+        trigger=parse_cron(daily_cron, tz),
         id="daily_update",
         replace_existing=True,
     )
     scheduler.add_job(
         run_scheduled_cleanup_archive,
-        trigger=_parse_cron(cleanup_cron, tz),
+        trigger=parse_cron(cleanup_cron, tz),
         id="cleanup_archive",
         replace_existing=True,
     )
@@ -124,21 +97,4 @@ app = FastAPI(
 )
 app.include_router(stocks_router)
 mount_protected_docs(app)
-
-
-@app.api_route(
-    "/",
-    methods=["GET", "HEAD"],
-    tags=["Health"],
-    summary="Root health check (Render default path)",
-    response_model=HealthResponse,
-    include_in_schema=False,
-)
-@app.get(
-    "/health",
-    tags=["Health"],
-    summary="Health check",
-    response_model=HealthResponse,
-)
-async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+mount_health(app)

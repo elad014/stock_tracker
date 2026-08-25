@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
-from models.chat import HealthResponse
 from routers.chat_routes import router as chat_router
+from utils import mount_health
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -55,21 +55,4 @@ app = FastAPI(
 )
 app.include_router(chat_router)
 mount_protected_docs(app)
-
-
-@app.api_route(
-    "/",
-    methods=["GET", "HEAD"],
-    tags=["Health"],
-    summary="Root health check",
-    response_model=HealthResponse,
-    include_in_schema=False,
-)
-@app.get(
-    "/health",
-    tags=["Health"],
-    summary="Health check",
-    response_model=HealthResponse,
-)
-async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+mount_health(app)

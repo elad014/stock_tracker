@@ -1,10 +1,9 @@
-import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z])?$")
+from constant import TICKER_PATTERN
 
 
 class AddWatchlistRequest(BaseModel):
@@ -28,7 +27,7 @@ class AddWatchlistRequest(BaseModel):
         symbol = value.strip().upper()
         if not symbol:
             raise ValueError("symbol is required")
-        if not _TICKER_PATTERN.fullmatch(symbol):
+        if not TICKER_PATTERN.fullmatch(symbol):
             raise ValueError("Invalid ticker (e.g. AAPL, BRK.A)")
         return symbol
 
@@ -113,10 +112,6 @@ class StockHistoryBar(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
-
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., examples=["ok"])
 
 
 class JobTriggerResponse(BaseModel):

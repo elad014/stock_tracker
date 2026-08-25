@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Path, Query
 
-from deps import verify_internal_api_key
+from internal_auth import verify_internal_api_key
 from models.docs import (
     AskRequest,
     AskResponse,

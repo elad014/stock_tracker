@@ -1,8 +1,8 @@
 from typing import Optional
-import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from constant import TICKER_PATTERN
 from ui_utils.user_validators import (
     normalize_admin_role,
     normalize_lock_status,
@@ -10,8 +10,6 @@ from ui_utils.user_validators import (
     validate_username,
 )
 from models.watchlist import WatchlistStock
-
-_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z])?$")
 
 
 class AdminUser(BaseModel):
@@ -41,7 +39,7 @@ class CreateAdminStockRequest(BaseModel):
     @classmethod
     def validate_ticker(cls, value: str) -> str:
         ticker = value.strip().upper()
-        if not _TICKER_PATTERN.fullmatch(ticker):
+        if not TICKER_PATTERN.fullmatch(ticker):
             raise ValueError("Invalid ticker (e.g. AAPL, BRK.A)")
         return ticker
 

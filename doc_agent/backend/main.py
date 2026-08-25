@@ -8,8 +8,8 @@ from fastapi import FastAPI
 from database_client import db
 from db_logics.schema_init import ensure_vector_schema
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
-from models.docs import HealthResponse
 from routers.docs_routes import router as docs_router
+from utils import mount_health
 
 load_dotenv()
 
@@ -75,21 +75,4 @@ app = FastAPI(
 )
 app.include_router(docs_router)
 mount_protected_docs(app)
-
-
-@app.api_route(
-    "/",
-    methods=["GET", "HEAD"],
-    tags=["Health"],
-    summary="Root health check",
-    response_model=HealthResponse,
-    include_in_schema=False,
-)
-@app.get(
-    "/health",
-    tags=["Health"],
-    summary="Health check",
-    response_model=HealthResponse,
-)
-async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+mount_health(app)

@@ -5,10 +5,6 @@ from pydantic import BaseModel, Field
 from constant import DOC_MAX_QUERY_CHARS
 
 
-class HealthResponse(BaseModel):
-    status: str = Field(..., examples=["ok"])
-
-
 class IngestRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     document_id: str = Field(

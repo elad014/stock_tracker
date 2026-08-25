@@ -1,6 +1,5 @@
 from models.stocks import (
     AddWatchlistRequest,
-    HealthResponse,
     JobTriggerResponse,
     MessageResponse,
     RemoveWatchlistRequest,
@@ -9,7 +8,6 @@ from models.stocks import (
 
 __all__ = [
     "AddWatchlistRequest",
-    "HealthResponse",
     "JobTriggerResponse",
     "MessageResponse",
     "RemoveWatchlistRequest",
