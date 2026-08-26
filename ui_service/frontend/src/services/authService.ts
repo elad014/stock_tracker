@@ -2,13 +2,16 @@ import axios from "axios";
 
 import type {
   CurrentUser,
+  EncryptedPayload,
   LoginPayload,
+  LoginPublicKey,
   RegisterPayload,
   RegisterResponse,
   TokenResponse,
   UpdateSettingsPayload,
   UpdateSettingsResponse,
 } from "../models/auth";
+import { encryptJsonPayload } from "../utils/payloadCrypto";
 
 const api = axios.create({ baseURL: "/auth" });
 
@@ -26,7 +29,9 @@ export async function registerUser(data: RegisterPayload): Promise<RegisterRespo
 }
 
 export async function loginUser(data: LoginPayload): Promise<TokenResponse> {
-  const res = await api.post<TokenResponse>("/login", data);
+  const keyRes = await api.get<LoginPublicKey>("/public-key");
+  const encrypted: EncryptedPayload = await encryptJsonPayload(data, keyRes.data);
+  const res = await api.post<TokenResponse>("/login", encrypted);
   return res.data;
 }
 

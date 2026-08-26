@@ -35,6 +35,26 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class LoginPublicKey(BaseModel):
+    kty: str
+    n: str
+    e: str
+
+
+class EncryptedPayload(BaseModel):
+    wrapped_key: str
+    iv: str
+    ciphertext: str
+
+    @field_validator("wrapped_key", "iv", "ciphertext")
+    @classmethod
+    def require_ciphertext_fields(cls, v: str) -> str:
+        stripped: str = v.strip()
+        if not stripped or len(stripped) > 8192:
+            raise ValueError("Invalid encrypted payload")
+        return stripped
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
