@@ -10,6 +10,18 @@ export interface LoginPayload {
   password: string;
 }
 
+export interface LoginPublicKey {
+  kty: string;
+  n: string;
+  e: string;
+}
+
+export interface EncryptedPayload {
+  wrapped_key: string;
+  iv: string;
+  ciphertext: string;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: string;

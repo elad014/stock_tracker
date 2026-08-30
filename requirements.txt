@@ -4,6 +4,7 @@ asyncpg
 httpx
 bcrypt
 python-jose[cryptography]
+cryptography
 pydantic[email]
 python-dotenv
 python-multipart
