@@ -178,6 +178,36 @@ npm run dev
 
 Vite starts at `http://localhost:5173`.
 
+## Automated tests
+
+The repository keeps isolated unit tests and integration/service tests in separate folders:
+
+- `tests/unit` covers backend business logic, validators, mapping/parsing helpers, cache/rate-limit guards, API-client response parsing, LLM/embedding wrappers, document chunking, and database logic with mocks/fakes.
+- `tests/integration` covers main application flows through FastAPI route handlers and service layers, including auth/admin flows, watchlist flows, stock quote/history persistence, ui-service communication with stock-manager/news-agent/doc-agent/chat-agent, internal API-key auth, news/article processing, document upload/ingest/ask flows, and chat orchestration.
+
+The tests are deterministic and do not use production data. They do not require Docker, Neon/PostgreSQL, S3/Supabase, Twelve Data, Finnhub, Gemini, or any other live external service. Paid and external integrations are mocked or faked.
+
+Run commands from the repository root after installing the Python dependencies.
+
+Run unit tests:
+
+```bash
+python -m unittest discover -s tests/unit -v
+```
+
+Run integration/service tests:
+
+```bash
+python -m unittest discover -s tests/integration -v
+```
+
+Run all tests with detailed per-test output and grouped summaries:
+
+```bash
+python run_tests.py
+```
+
+`run_tests.py` exits with a non-zero status code if any test fails or errors, so it can be used later in CI/GitHub Actions.
 ## User types
 
 | Role | Capabilities |
@@ -186,3 +216,6 @@ Vite starts at `http://localhost:5173`.
 | Admin | Everything a user can do, plus manage users, locks, stocks, and watchlist assignments |
 
 Deleting a user from admin removes that account’s S3 files, vectors, ingest quota, and watchlist rows.
+
+
+

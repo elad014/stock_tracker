@@ -164,6 +164,7 @@ async def _upsert_quote_from_provider(
         change=quote.change,
         percent_change=quote.percent_change,
         previous_close=quote.previous_close,
+        open=quote.open,
         high=quote.high,
         low=quote.low,
         volume=quote.volume,
@@ -454,3 +455,4 @@ async def unwatch_stock_everywhere(stock_id: str) -> MessageResponse:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock not found")
     await watchlist_db.delete_watchlist_for_stock(stock_id)
     return MessageResponse(message="Stock removed from all watchlists")
+

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS stock_quotes (
     change NUMERIC,
     percent_change NUMERIC,
     previous_close NUMERIC,
+    open NUMERIC,
     high NUMERIC,
     low NUMERIC,
     volume BIGINT,
@@ -116,6 +117,8 @@ CREATE TABLE IF NOT EXISTS news_articles (
 CREATE INDEX IF NOT EXISTS idx_news_articles_published_at
     ON news_articles (published_at DESC);
 
+ALTER TABLE stock_quotes ADD COLUMN IF NOT EXISTS open NUMERIC;
+
 ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS text TEXT;
 ALTER TABLE news_articles DROP COLUMN IF EXISTS provider_article_id;
 
@@ -131,3 +134,4 @@ CREATE TABLE IF NOT EXISTS stock_articles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stock_articles_article_id ON stock_articles (article_id);
+

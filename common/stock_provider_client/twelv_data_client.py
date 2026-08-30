@@ -37,12 +37,15 @@ class TwelveDataClient:
         query_params: dict[str, Any] = dict(params or {})
         query_params["apikey"] = self.api_key
 
-        if method.upper() == "GET":
-            response = requests.get(url, params=query_params, timeout=60)
-        elif method.upper() == "POST":
-            response = requests.post(url, json=query_params, timeout=60)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        try:
+            if method.upper() == "GET":
+                response = requests.get(url, params=query_params, timeout=60)
+            elif method.upper() == "POST":
+                response = requests.post(url, json=query_params, timeout=60)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Twelve Data request failed: {exc}") from None
 
         try:
             response.raise_for_status()
@@ -53,9 +56,15 @@ class TwelveDataClient:
                 raise RuntimeError(f"Symbol not found: {symbol}") from None
             raise RuntimeError(f"Twelve Data HTTP {status_code}") from None
 
-        data: dict[str, Any] = response.json()
+        try:
+            data = response.json()
+        except Exception as exc:
+            raise RuntimeError("Twelve Data returned invalid JSON") from None
 
-        if data.get("status") == "error":
+        if not isinstance(data, (dict, list)):
+            raise RuntimeError("Twelve Data returned an invalid response")
+
+        if isinstance(data, dict) and data.get("status") == "error":
             code = data.get("code")
             message = str(data.get("message") or "Unknown error")
             message_lower = message.lower()
@@ -91,6 +100,7 @@ class TwelveDataClient:
             change=to_float(data.get("change")),
             percent_change=to_float(data.get("percent_change")),
             previous_close=to_float(data.get("previous_close")),
+            open=to_float(data.get("open")),
             high=to_float(data.get("high")),
             low=to_float(data.get("low")),
             volume=to_int(data.get("volume")),
@@ -131,6 +141,7 @@ class TwelveDataClient:
                     volume=to_int(row.get("volume")),
                 )
             )
+        bars.sort(key=lambda bar: bar.date)
         return bars
 
     def is_market_open(self, exchange: str = "NASDAQ") -> bool:
@@ -141,3 +152,7 @@ class TwelveDataClient:
                     return bool(item.get("is_market_open"))
             return bool(data[0].get("is_market_open")) if data else False
         return bool(data.get("is_market_open"))
+
+
+
+

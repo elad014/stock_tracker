@@ -11,6 +11,7 @@ class QuoteData:
     change: float | None
     percent_change: float | None
     previous_close: float | None = None
+    open: float | None = None
     high: float | None = None
     low: float | None = None
     volume: int | None = None
@@ -60,3 +61,4 @@ def parse_date(value: Any) -> date | None:
             return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
         except ValueError:
             return None
+
