@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import asyncpg
@@ -9,12 +9,12 @@ QUOTES_TABLE = "stock_quotes"
 
 _QUOTE_COLUMNS = (
     "stock_id, symbol, name, close, change, percent_change, "
-    "previous_close, high, low, volume, fifty_two_week_high, fifty_two_week_low, "
+    "previous_close, open, high, low, volume, fifty_two_week_high, fifty_two_week_low, "
     "stock_summery, stock_news_published_at"
 )
 _QUOTE_COLUMNS_Q = (
     "q.stock_id, q.symbol, q.name, q.close, q.change, q.percent_change, "
-    "q.previous_close, q.high, q.low, q.volume, q.fifty_two_week_high, q.fifty_two_week_low, "
+    "q.previous_close, q.open, q.high, q.low, q.volume, q.fifty_two_week_high, q.fifty_two_week_low, "
     "q.stock_summery, q.stock_news_published_at"
 )
 
@@ -40,6 +40,7 @@ def _normalize_quote(row: dict[str, Any]) -> dict[str, Any]:
         "previous_close": (
             float(row["previous_close"]) if row.get("previous_close") is not None else None
         ),
+        "open": float(row["open"]) if row.get("open") is not None else None,
         "high": float(row["high"]) if row.get("high") is not None else None,
         "low": float(row["low"]) if row.get("low") is not None else None,
         "volume": int(row["volume"]) if row.get("volume") is not None else None,
@@ -100,6 +101,7 @@ async def upsert_quote(
     change: float | None,
     percent_change: float | None,
     previous_close: float | None = None,
+    open: float | None = None,
     high: float | None = None,
     low: float | None = None,
     volume: int | None = None,
@@ -111,21 +113,22 @@ async def upsert_quote(
         f"""
         INSERT INTO {QUOTES_TABLE} (
             stock_id, symbol, name, close, change, percent_change,
-            previous_close, high, low, volume,
+            previous_close, open, high, low, volume,
             fifty_two_week_high, fifty_two_week_low, updated_at
         )
         VALUES (
             $1::uuid, $2, $3, $4, $5, $6,
-            $7, $8, $9, $10,
-            $11, $12, $13
+            $7, $8, $9, $10, $11,
+            $12, $13, $14
         )
-        ON CONFLICT (stock_id) DO UPDATE SET
+        ON CONFLICT (symbol) DO UPDATE SET
             symbol = EXCLUDED.symbol,
             name = EXCLUDED.name,
             close = EXCLUDED.close,
             change = EXCLUDED.change,
             percent_change = EXCLUDED.percent_change,
             previous_close = EXCLUDED.previous_close,
+            open = EXCLUDED.open,
             high = EXCLUDED.high,
             low = EXCLUDED.low,
             volume = EXCLUDED.volume,
@@ -141,12 +144,13 @@ async def upsert_quote(
         change,
         percent_change,
         previous_close,
+        open,
         high,
         low,
         volume,
         fifty_two_week_high,
         fifty_two_week_low,
-        datetime.utcnow(),
+        datetime.now(timezone.utc),
         conn=conn,
     )
     assert row is not None
@@ -215,7 +219,7 @@ async def update_stock_summery(
         stock_id,
         stock_summery,
         stock_news_published_at,
-        datetime.utcnow(),
+        datetime.now(timezone.utc),
         conn=conn,
     )
     return _normalize_quote(row) if row else None
@@ -230,3 +234,6 @@ async def delete_quote(
         stock_id,
         conn=conn,
     )
+
+
+

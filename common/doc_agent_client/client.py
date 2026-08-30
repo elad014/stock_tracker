@@ -24,7 +24,7 @@ class DocAgentClient:
         detail: Any
         try:
             payload = response.json()
-            detail = payload.get("detail", payload)
+            detail = payload.get("detail", payload) if isinstance(payload, dict) else payload
         except Exception:
             detail = response.text or "Doc agent request failed"
         retry_after: Optional[str] = response.headers.get("Retry-After")
@@ -33,6 +33,21 @@ class DocAgentClient:
             detail,
             headers={"Retry-After": retry_after} if retry_after else None,
         )
+
+    def _json_response(self, response: httpx.Response) -> dict[str, Any]:
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Doc agent returned invalid JSON",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Doc agent returned an invalid response",
+            )
+        return payload
 
     async def ingest_document(
         self,
@@ -63,10 +78,7 @@ class DocAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        payload = response.json()
-        if not isinstance(payload, dict):
-            return {}
-        return payload
+        return self._json_response(response)
 
     async def ask_document(
         self,
@@ -99,10 +111,7 @@ class DocAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        payload = response.json()
-        if not isinstance(payload, dict):
-            return {}
-        return payload
+        return self._json_response(response)
 
     async def purge_user(self, user_id: str) -> dict[str, Any]:
         """Delete all document vectors and ingest quota for one user."""
@@ -122,10 +131,7 @@ class DocAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        payload = response.json()
-        if not isinstance(payload, dict):
-            return {}
-        return payload
+        return self._json_response(response)
 
     async def delete_document_vectors(
         self,
@@ -156,10 +162,7 @@ class DocAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        payload = response.json()
-        if not isinstance(payload, dict):
-            return {}
-        return payload
+        return self._json_response(response)
 
 
 doc_agent_client = DocAgentClient()

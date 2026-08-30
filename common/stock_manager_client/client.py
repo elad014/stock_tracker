@@ -24,65 +24,96 @@ class StockManagerClient:
         detail: Any
         try:
             payload = response.json()
-            detail = payload.get("detail", payload)
+            detail = payload.get("detail", payload) if isinstance(payload, dict) else payload
         except Exception:
             detail = response.text or "Stock manager request failed"
         raise HTTPException(response.status_code, detail)
 
-    async def list_watchlist(self, user_id: str) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/watchlist/{user_id}",
-                headers=self._headers(),
+    def _json_response(self, response: httpx.Response, expected_type: type) -> Any:
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Stock manager returned invalid JSON",
+            ) from exc
+        if not isinstance(payload, expected_type):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Stock manager returned an invalid response",
             )
+        return payload
+
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        timeout: float,
+        expected_type: type,
+        **kwargs: Any,
+    ) -> Any:
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.request(
+                    method,
+                    f"{self._base_url}{path}",
+                    headers=self._headers(),
+                    **kwargs,
+                )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Failed to reach stock manager",
+            ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        return response.json()
+        return self._json_response(response, expected_type)
+
+    async def list_watchlist(self, user_id: str) -> list[dict[str, Any]]:
+        return await self._request_json(
+            "GET",
+            f"/watchlist/{user_id}",
+            timeout=30.0,
+            expected_type=list,
+        )
 
     async def list_stocks(self) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/stocks",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "GET",
+            "/stocks",
+            timeout=30.0,
+            expected_type=list,
+        )
 
     async def get_stock(self, stock_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/stocks/{stock_id}",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "GET",
+            f"/stocks/{stock_id}",
+            timeout=30.0,
+            expected_type=dict,
+        )
 
     async def get_stock_history(
         self,
         stock_id: str,
         range_key: str = "1Y",
     ) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(
-                f"{self._base_url}/stocks/{stock_id}/history",
-                headers=self._headers(),
-                params={"range": range_key},
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "GET",
+            f"/stocks/{stock_id}/history",
+            timeout=60.0,
+            expected_type=list,
+            params={"range": range_key},
+        )
 
     async def get_stock_summery(self, stock_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/stocks/{stock_id}/summary",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "GET",
+            f"/stocks/{stock_id}/summary",
+            timeout=30.0,
+            expected_type=dict,
+        )
 
     async def update_stock_summery(
         self,
@@ -95,92 +126,83 @@ class StockManagerClient:
             "stock_summery": stock_summery,
             "stock_news_published_at": stock_news_published_at,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.put(
-                f"{self._base_url}/stocks/{stock_id}/summary",
-                headers=self._headers(),
-                json=body,
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "PUT",
+            f"/stocks/{stock_id}/summary",
+            timeout=30.0,
+            expected_type=dict,
+            json=body,
+        )
 
     async def get_stock_by_symbol(self, symbol: str) -> Optional[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/stocks/symbol/{symbol}",
-                headers=self._headers(),
-            )
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self._base_url}/stocks/symbol/{symbol}",
+                    headers=self._headers(),
+                )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Failed to reach stock manager",
+            ) from exc
         if response.status_code == status.HTTP_404_NOT_FOUND:
             return None
         if response.status_code >= 400:
             self._raise_from_response(response)
-        return response.json()
+        return self._json_response(response, dict)
 
     async def is_on_watchlist(self, user_id: str, stock_id: str) -> bool:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"{self._base_url}/watchlist/{user_id}/{stock_id}",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        payload = response.json()
+        payload = await self._request_json(
+            "GET",
+            f"/watchlist/{user_id}/{stock_id}",
+            timeout=30.0,
+            expected_type=dict,
+        )
         return bool(payload.get("on_watchlist"))
 
     async def add_to_watchlist(self, user_id: str, symbol: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{self._base_url}/watchlist",
-                headers=self._headers(),
-                json={"user_id": user_id, "symbol": symbol},
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "POST",
+            "/watchlist",
+            timeout=120.0,
+            expected_type=dict,
+            json={"user_id": user_id, "symbol": symbol},
+        )
 
     async def remove_from_watchlist(self, user_id: str, stock_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(
-                "DELETE",
-                f"{self._base_url}/watchlist",
-                headers=self._headers(),
-                json={"user_id": user_id, "stock_id": stock_id},
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "DELETE",
+            "/watchlist",
+            timeout=30.0,
+            expected_type=dict,
+            json={"user_id": user_id, "stock_id": stock_id},
+        )
 
     async def ensure_and_assign(self, user_id: str, symbol: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{self._base_url}/admin/ensure-and-assign",
-                headers=self._headers(),
-                json={"user_id": user_id, "symbol": symbol},
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "POST",
+            "/admin/ensure-and-assign",
+            timeout=120.0,
+            expected_type=dict,
+            json={"user_id": user_id, "symbol": symbol},
+        )
 
     async def clear_user_watchlist(self, user_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.delete(
-                f"{self._base_url}/watchlist/user/{user_id}",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "DELETE",
+            f"/watchlist/user/{user_id}",
+            timeout=30.0,
+            expected_type=dict,
+        )
 
     async def unwatch_stock_everywhere(self, stock_id: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.delete(
-                f"{self._base_url}/stocks/{stock_id}",
-                headers=self._headers(),
-            )
-        if response.status_code >= 400:
-            self._raise_from_response(response)
-        return response.json()
+        return await self._request_json(
+            "DELETE",
+            f"/stocks/{stock_id}",
+            timeout=30.0,
+            expected_type=dict,
+        )
 
     @staticmethod
     def quote_to_watchlist_stock(payload: dict[str, Any]) -> dict[str, Any]:

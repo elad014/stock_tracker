@@ -77,6 +77,7 @@ async def run_daily_update(*, force: bool = False) -> None:
                     change=quote.change,
                     percent_change=quote.percent_change,
                     previous_close=quote.previous_close,
+                    open=quote.open,
                     high=quote.high,
                     low=quote.low,
                     volume=quote.volume,
@@ -100,3 +101,4 @@ async def run_daily_update(*, force: bool = False) -> None:
 async def run_scheduled_daily_update() -> None:
     """Cron entry: never cooldown-limited; skipped only if a run is already in progress."""
     await daily_update_guard.run_from_schedule(run_daily_update)
+

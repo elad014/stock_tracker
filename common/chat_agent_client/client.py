@@ -24,10 +24,25 @@ class ChatAgentClient:
         detail: Any
         try:
             payload = response.json()
-            detail = payload.get("detail", payload)
+            detail = payload.get("detail", payload) if isinstance(payload, dict) else payload
         except Exception:
             detail = response.text or "Chat agent request failed"
         raise HTTPException(response.status_code, detail)
+
+    def _json_response(self, response: httpx.Response) -> dict[str, Any]:
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Chat agent returned invalid JSON",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Chat agent returned an invalid response",
+            )
+        return payload
 
     async def chat(
         self,
@@ -65,7 +80,7 @@ class ChatAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        return response.json()
+        return self._json_response(response)
 
     async def clear_chat_session(self, user_id: str) -> dict[str, Any]:
         try:
@@ -81,7 +96,7 @@ class ChatAgentClient:
             ) from exc
         if response.status_code >= 400:
             self._raise_from_response(response)
-        return response.json()
+        return self._json_response(response)
 
 
 chat_agent_client = ChatAgentClient()
