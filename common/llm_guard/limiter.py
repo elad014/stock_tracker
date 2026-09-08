@@ -1,6 +1,6 @@
 """In-process sliding-window limiter for LLM HTTP calls.
 
-Shared by all agents. Pass agent-specific max_attempts, window, and error text
+Shared by all services. Pass service-specific max_attempts, window, and error text
 when constructing. Do not use this for login or password reset.
 """
 

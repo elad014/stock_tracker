@@ -11,82 +11,82 @@ services:
       - ./common:/app/common
     environment:
       - PYTHONPATH=/app/common:/app/backend
-      - STOCK_MANAGER_URL=http://stock-manager:8001
-      - NEWS_AGENT_URL=http://news-agent:8003
-      - DOC_AGENT_URL=http://doc-agent:8004
-      - CHAT_AGENT_URL=http://chat-agent:8002
+      - STOCK_SERVICE_URL=http://stock-service:8001
+      - NEWS_SERVICE_URL=http://news-service:8003
+      - DOC_SERVICE_URL=http://doc-service:8004
+      - CHAT_SERVICE_URL=http://chat-service:8002
     depends_on:
-      - stock-manager
-      - news-agent
-      - doc-agent
-      - chat-agent
+      - stock-service
+      - news-service
+      - doc-service
+      - chat-service
     restart: unless-stopped
 
-  stock-manager:
+  stock-service:
     build:
       context: .
-      dockerfile: stock_manager/Dockerfile
+      dockerfile: stock_service/Dockerfile
     ports:
       - "8001:8001"
     env_file:
-      - ./stock_manager/backend/.env
+      - ./stock_service/backend/.env
     volumes:
       - ./common:/app/common
     environment:
       - PYTHONPATH=/app/common:/app/backend
     restart: unless-stopped
 
-  chat-agent:
+  chat-service:
     build:
       context: .
-      dockerfile: chat_agent/Dockerfile
+      dockerfile: chat_service/Dockerfile
     ports:
       - "8002:8002"
     env_file:
-      - ./chat_agent/backend/.env
+      - ./chat_service/backend/.env
     volumes:
       - ./common:/app/common
-      - ./chat_agent/backend:/app/backend
+      - ./chat_service/backend:/app/backend
     environment:
       - PYTHONPATH=/app/common:/app/backend
-      - STOCK_MANAGER_URL=http://stock-manager:8001
-      - NEWS_AGENT_URL=http://news-agent:8003
-      - DOC_AGENT_URL=http://doc-agent:8004
+      - STOCK_SERVICE_URL=http://stock-service:8001
+      - NEWS_SERVICE_URL=http://news-service:8003
+      - DOC_SERVICE_URL=http://doc-service:8004
     depends_on:
-      - stock-manager
-      - news-agent
-      - doc-agent
+      - stock-service
+      - news-service
+      - doc-service
     restart: unless-stopped
 
-  news-agent:
+  news-service:
     build:
       context: .
-      dockerfile: news_agent/Dockerfile
+      dockerfile: news_service/Dockerfile
     ports:
       - "8003:8003"
     env_file:
-      - ./news_agent/backend/.env
+      - ./news_service/backend/.env
     volumes:
       - ./common:/app/common
-      - ./news_agent/backend:/app/backend
+      - ./news_service/backend:/app/backend
     environment:
       - PYTHONPATH=/app/common:/app/backend
-      - STOCK_MANAGER_URL=http://stock-manager:8001
+      - STOCK_SERVICE_URL=http://stock-service:8001
     depends_on:
-      - stock-manager
+      - stock-service
     restart: unless-stopped
 
-  doc-agent:
+  doc-service:
     build:
       context: .
-      dockerfile: doc_agent/Dockerfile
+      dockerfile: doc_service/Dockerfile
     ports:
       - "8004:8004"
     env_file:
-      - ./doc_agent/backend/.env
+      - ./doc_service/backend/.env
     volumes:
       - ./common:/app/common
-      - ./doc_agent/backend:/app/backend
+      - ./doc_service/backend:/app/backend
     environment:
       - PYTHONPATH=/app/common:/app/backend
     restart: unless-stopped

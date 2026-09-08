@@ -120,7 +120,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 
 def _area_order(items) -> list[str]:
-    preferred = ["common", "ui_service", "stock_manager", "chat_agent"]
+    preferred = ["common", "ui_service", "stock_service", "chat_service"]
     known = [area for area in preferred if area in items]
     extra = sorted(area for area in items if area not in preferred)
     return known + extra

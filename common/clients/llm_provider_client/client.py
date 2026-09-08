@@ -1,6 +1,6 @@
 """LiteLLM-based client for OpenAI, Anthropic, Gemini, and other providers.
 
-Used by chat-agent (orchestrator) and news-agent (summaries).
+Used by chat-service (orchestrator) and news-service (summaries).
 
 Environment variables:
 - ``LLM_MODELS`` — comma-separated LiteLLM model ids, tried in order until one
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMProviderClient:
-    """LiteLLM vendor client used by chat-agent and news-agent."""
+    """LiteLLM vendor client used by chat-service and news-service."""
 
     def __init__(self, model: str | None = None) -> None:
         env_models: list[str] = self._models_from_env()

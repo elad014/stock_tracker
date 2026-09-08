@@ -1,4 +1,4 @@
-"""FastAPI dependency: require X-Internal-Api-Key on internal agent routes."""
+"""FastAPI dependency: require X-Internal-Api-Key on internal service routes."""
 
 import hmac
 import os

@@ -6,7 +6,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import HTTPException, UploadFile, status
 
-from clients.doc_agent_client import doc_agent_client as doc_agent
+from clients.doc_service_client import doc_service_client as doc_service
 from models.auth import MessageResponse
 from models.documents import DocumentTree, DownloadUrlResponse, TreeNode
 from clients.object_storage_client import (
@@ -257,7 +257,7 @@ async def upload_document(
         content_type="application/pdf",
     )
     try:
-        await doc_agent.ingest_document(user_id, relative)
+        await doc_service.ingest_document(user_id, relative)
     except Exception:
         try:
             await storage.delete(key)
@@ -289,7 +289,7 @@ async def delete_file(user: dict[str, Any], path: str) -> MessageResponse:
 
 
 async def _delete_document_vectors(user_id: str, relative_path: str) -> None:
-    await doc_agent.delete_document_vectors(user_id, relative_path)
+    await doc_service.delete_document_vectors(user_id, relative_path)
 
 
 async def delete_all_user_files(user_id: str) -> int:

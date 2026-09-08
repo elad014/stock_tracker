@@ -13,22 +13,22 @@ The app is **not** an investment advisory tool. Market data, news summaries, and
 - Chat from the dashboard; the assistant can use stock quotes, news, and your documents.
 - Admin users can manage accounts, locks, and watchlist assignments.
 
-Home-page quotes are an illustrative snapshot, not live brokerage data. Signed-in quotes come from stock-manager.
+Home-page quotes are an illustrative snapshot, not live brokerage data. Signed-in quotes come from stock-service.
 
 ## Architecture
 
-Five Docker services share one Neon PostgreSQL database (plus pgvector for documents). The UI service is the only public API. Internal agents talk over HTTP with `X-Internal-Api-Key`.
+Five Docker services share one Neon PostgreSQL database (plus pgvector for documents). The UI service is the only public API. Internal services talk over HTTP with `X-Internal-Api-Key`.
 
 ```
 Browser
   -> ui-service :8000   React SPA + FastAPI (JWT)
-       -> stock-manager :8001   quotes, history, watchlist
-       -> news-agent    :8003   Finnhub articles + LLM summaries
-       -> doc-agent     :8004   PDF ingest, embeddings, RAG
-       -> chat-agent    :8002   LiteLLM orchestrator (no database)
+       -> stock-service :8001   quotes, history, watchlist
+       -> news-service    :8003   Finnhub articles + LLM summaries
+       -> doc-service     :8004   PDF ingest, embeddings, RAG
+       -> chat-service    :8002   LiteLLM orchestrator (no database)
 ```
 
-Chat-agent calls the other three internal services. News-agent writes stock rollup summaries through stock-manager. Doc-agent reads PDFs from the same object-storage bucket that ui-service writes to.
+Chat-service calls the other three internal services. News-service writes stock rollup summaries through stock-service. Doc-service reads PDFs from the same object-storage bucket that ui-service writes to.
 
 ## Tech stack
 
@@ -43,7 +43,7 @@ Chat-agent calls the other three internal services. News-agent writes stock roll
 | Market data | Twelve Data |
 | News | Finnhub, trafilatura for article text |
 | LLM | LiteLLM (Gemini by default; OpenAI and Anthropic supported) |
-| Scheduling | APScheduler in stock-manager and news-agent |
+| Scheduling | APScheduler in stock-service and news-service |
 | Containers | Docker, Docker Compose |
 
 ## Project structure
@@ -53,10 +53,10 @@ stock_tracker/
 ├── docker-compose.yml
 ├── requirements.txt
 ├── ui_service/          # Public SPA + BFF (port 8000)
-├── stock_manager/       # Quotes, history, watchlist (port 8001)
-├── chat_agent/          # Chat orchestrator (port 8002)
-├── news_agent/          # News fetch and summaries (port 8003)
-├── doc_agent/           # PDF embeddings and RAG (port 8004)
+├── stock_service/       # Quotes, history, watchlist (port 8001)
+├── chat_service/          # Chat orchestrator (port 8002)
+├── news_service/          # News fetch and summaries (port 8003)
+├── doc_service/           # PDF embeddings and RAG (port 8004)
 └── common/              # Shared clients, constants, and guards
 ```
 
@@ -131,12 +131,12 @@ Internal services expose their own `/health` plus API-key-protected `/docs`.
 Copy each example file to `.env` in the same folder and fill in real values:
 
 - `ui_service/backend/.env.example`
-- `stock_manager/backend/.env.example`
-- `chat_agent/backend/.env.example`
-- `news_agent/backend/.env.example`
-- `doc_agent/backend/.env.example`
+- `stock_service/backend/.env.example`
+- `chat_service/backend/.env.example`
+- `news_service/backend/.env.example`
+- `doc_service/backend/.env.example`
 
-`INTERNAL_API_KEY` must match across services. `DATABASE_URL` is used by ui-service, stock-manager, news-agent, and doc-agent. Chat-agent has no database. Ui-service and doc-agent must use the same S3 bucket for user PDFs.
+`INTERNAL_API_KEY` must match across services. `DATABASE_URL` is used by ui-service, stock-service, news-service, and doc-service. Chat-service has no database. Ui-service and doc-service must use the same S3 bucket for user PDFs.
 
 ### Run with Docker
 
@@ -149,10 +149,10 @@ The app is at `http://localhost:8000`.
 | Service | Port |
 | --- | --- |
 | ui-service | 8000 |
-| stock-manager | 8001 |
-| chat-agent | 8002 |
-| news-agent | 8003 |
-| doc-agent | 8004 |
+| stock-service | 8001 |
+| chat-service | 8002 |
+| news-service | 8003 |
+| doc-service | 8004 |
 
 ### Local development
 

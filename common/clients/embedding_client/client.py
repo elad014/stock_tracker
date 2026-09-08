@@ -1,4 +1,4 @@
-"""LiteLLM embedding client for doc-agent RAG.
+"""LiteLLM embedding client for doc-service RAG.
 
 Environment variables:
 - ``EMBEDDING_MODEL`` — LiteLLM embedding model id
