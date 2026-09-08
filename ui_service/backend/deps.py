@@ -1,17 +1,10 @@
-import os
 from typing import Any
 
-from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 
 from db_logics.user_db_logic import get_user_auth_by_id, get_user_by_email, is_admin_role, is_user_locked
-
-load_dotenv()
-
-JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
-ALGORITHM = "HS256"
+from ui_utils.token_crypto import ACCESS_TOKEN_TYPE, TokenError, decode_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -26,23 +19,17 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token: str = credentials.credentials
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") == "reset":
-            raise HTTPException(
-                status.HTTP_401_UNAUTHORIZED,
-                "Invalid access token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        user_id: str | None = payload.get("user_id")
-        email: str | None = payload.get("sub")
-    except JWTError as exc:
+        claims: dict[str, Any] = decode_token(credentials.credentials, ACCESS_TOKEN_TYPE)
+    except TokenError as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    user_id: str | None = claims.get("user_id")
+    email: str | None = claims.get("sub")
 
     user = None
     if user_id:

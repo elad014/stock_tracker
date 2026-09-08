@@ -37,7 +37,7 @@ Chat-service calls the other three internal services. News-service writes stock 
 | Frontend | React 18, TypeScript, Vite 5, React Router 6, Axios |
 | Backend | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
 | Database | PostgreSQL (Neon), pgvector |
-| Auth | bcrypt, JWT (`python-jose`) |
+| Auth | bcrypt, encrypted JWT / JWE (`joserfc`) |
 | Email | Resend |
 | Object storage | Supabase Storage over the S3 protocol (`boto3`) |
 | Market data | Twelve Data |
