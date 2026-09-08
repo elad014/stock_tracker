@@ -14,10 +14,16 @@ import StockNewsArticles from "../components/StockNewsArticles";
 import StockPriceChart from "../components/StockPriceChart";
 
 const HISTORY_RANGES: HistoryRange[] = ["5D", "1M", "3M", "6M", "1Y", "5Y"];
+const PAGE_NOT_FOUND = "404 Page not found";
 
 function formatApiError(err: unknown, fallback: string): string {
+  const status: number | undefined = (err as { response?: { status?: number } })
+    ?.response?.status;
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response
     ?.data?.detail;
+  if (status === 500 || detail === "Internal Server Error") {
+    return PAGE_NOT_FOUND;
+  }
   if (typeof detail === "string") {
     return detail;
   }
@@ -37,7 +43,7 @@ export default function StockDetailsPage(): JSX.Element {
 
   useEffect(() => {
     if (!stockId) {
-      setStockError("Stock not found");
+      setStockError(PAGE_NOT_FOUND);
       setLoadingStock(false);
       return;
     }
@@ -65,12 +71,12 @@ export default function StockDetailsPage(): JSX.Element {
           navigate("/login");
           return;
         }
-        if (status === 404) {
-          setStockError("Stock not found");
-        } else if (status === 403) {
+        if (status === 403) {
           setStockError("This stock is not on your watchlist");
+        } else if (status === 404 || status === 500) {
+          setStockError(PAGE_NOT_FOUND);
         } else {
-          setStockError(formatApiError(err, "Failed to load stock details"));
+          setStockError(formatApiError(err, PAGE_NOT_FOUND));
         }
       } finally {
         if (!cancelled) {
