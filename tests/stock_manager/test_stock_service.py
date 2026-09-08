@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from conftest import load_backend_module
-from stock_provider_client import QuoteData
+from clients.stock_provider_client import QuoteData
 
 
 stock_service = load_backend_module("stock_manager", "services.stock_service")

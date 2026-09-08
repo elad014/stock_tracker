@@ -23,7 +23,7 @@ from litellm import acompletion
 
 from constant import DEFAULT_MODEL, DEPRECATED_GEMINI_MODELS, NEWS_SUMMARIZE_SYSTEM_PROMPT
 from llm_guard import guarded_user_message
-from llm_provider_client.util import (
+from .util import (
     LLMCompletionResult,
     LLMToolCall,
     is_model_unavailable,

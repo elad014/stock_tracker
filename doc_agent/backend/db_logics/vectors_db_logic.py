@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from database_client import db
+from clients.database_client import db
 
 VECTORS_TABLE = "document_vectors"
 

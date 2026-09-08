@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from chat_agent_client import chat_agent_client as chat_agent
+from clients.chat_agent_client import chat_agent_client as chat_agent
 from models.chat import ChatRequest, ChatResponse
 
 

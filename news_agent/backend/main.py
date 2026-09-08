@@ -6,7 +6,7 @@ from typing import AsyncIterator
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from database_client import db
+from clients.database_client import db
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from jobs.news_update import run_scheduled_news_update
 from routers.articles_routes import router as articles_router
@@ -27,7 +27,7 @@ Internal News Agent for stock_tracker.
 Owns `news_articles` and `stock_articles` on the shared Neon database.
 Reads `stock_quotes` only to join/filter by ticker. Rollup `stock_summery`
 is written through stock-manager HTTP (news-agent does not write quotes).
-Summaries go through ``llm_provider_client`` (LiteLLM), not chat-agent.
+Summaries go through ``clients.llm_provider_client`` (LiteLLM), not chat-agent.
 
 ## Auth
 News and agent endpoints require header:
@@ -46,7 +46,7 @@ password, or `?api_key=`). They are not public.
 4. **Articles** — `GET /stocks/{stock_id}/articles`, `POST /stocks/{stock_id}/articles/sync`,
    `POST /articles/{article_id}/summarize`
 
-News source: Finnhub (`FINNHUB_API_KEY`) via `common/news_provider_client`.
+News source: Finnhub (`FINNHUB_API_KEY`) via `common/clients/news_provider_client`.
 """
 
 

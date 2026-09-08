@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 import services.documents_service as documents_service
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
-from doc_agent_client import doc_agent_client as doc_agent
+from clients.doc_agent_client import doc_agent_client as doc_agent
 from models.admin import (
     AdminCreateUserRequest,
     AdminSetPasswordRequest,
@@ -17,7 +17,7 @@ from models.admin import (
 from models.auth import MessageResponse
 from models.watchlist import WatchlistStock
 from services.auth_service import hash_password
-from stock_manager_client import stock_manager_client as stock_manager
+from clients.stock_manager_client import stock_manager_client as stock_manager
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:

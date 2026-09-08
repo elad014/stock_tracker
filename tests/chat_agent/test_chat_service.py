@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from conftest import load_backend_module
-from llm_provider_client.util import LLMCompletionResult, LLMToolCall
+from clients.llm_provider_client.util import LLMCompletionResult, LLMToolCall
 
 
 chat_service = load_backend_module("chat_agent", "services.chat_service")
