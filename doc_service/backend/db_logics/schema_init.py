@@ -90,10 +90,20 @@ async def _ensure_ingest_quota_table() -> None:
         )
 
 
+async def _vector_extension_exists() -> bool:
+    row = await db.fetch_one("SELECT 1 AS present FROM pg_extension WHERE extname = 'vector'")
+    return row is not None
+
+
 async def ensure_vector_schema() -> None:
     """Create the vector extension, table, and indexes if they are missing."""
     try:
-        await db.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        # doc_db_user cannot install extensions. pgvector is installed once by
+        # an admin role into public, which stays on the search_path, so skip
+        # the statement outright rather than relying on IF NOT EXISTS
+        # short-circuiting before the privilege check.
+        if not await _vector_extension_exists():
+            await db.execute("CREATE EXTENSION IF NOT EXISTS vector")
         await db.execute(_CREATE_TABLE)
         await _ensure_embedding_width()
         await db.execute(

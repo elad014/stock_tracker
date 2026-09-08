@@ -1,8 +1,21 @@
--- Doc-service vector store for stock_tracker.
+-- doc_service vector store for stock_tracker.
+-- Owner: doc_service (read/write) as doc_db_user. No other service may read it.
+--
 -- Keep this file in sync with doc_service/backend/db_logics/schema_init.py.
 -- schema_init.py is the executed source of truth (run on service startup).
+--
+-- Roles, grants and the migration off the shared public schema live in
+-- sql/migrations/001_schema_role_isolation.sql.
 
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE SCHEMA IF NOT EXISTS doc_schema;
+
+-- public stays on the path because pgvector is installed there: the vector
+-- type, the <=> operator and vector_cosine_ops all resolve through it.
+-- doc_schema comes first, so the tables below are created in doc_schema.
+SET search_path TO doc_schema, public;
+
+-- Installed once by an admin role; doc_db_user only needs USAGE on public.
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
 
 CREATE TABLE IF NOT EXISTS document_vectors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

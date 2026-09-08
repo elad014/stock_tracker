@@ -11,7 +11,10 @@ from clients.database_client import db
 
 ARTICLES_TABLE = "news_articles"
 STOCK_ARTICLES_TABLE = "stock_articles"
-QUOTES_TABLE = "stock_quotes"
+# Owned by stock_service. news_db_user holds USAGE on stock_schema and SELECT
+# on this one table, and stock_schema is kept off its search_path, so every
+# reference has to be schema-qualified.
+QUOTES_TABLE = "stock_schema.stock_quotes"
 
 SUMMARY_STATUS_NONE = "none"
 SUMMARY_STATUS_PENDING = "pending"
