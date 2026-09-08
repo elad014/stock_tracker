@@ -71,7 +71,7 @@ export default function HelpPage(): JSX.Element {
           <ul>
             <li>Price, daily change, and percent change.</li>
             <li>
-              History chart for 1D, 5D, 1M, 3M, 6M, 1Y, and 5Y.
+              History chart for 5D, 1M, 3M, 6M, 1Y, and 5Y.
             </li>
             <li>
               Market data: open, previous close, day high and low, volume,
