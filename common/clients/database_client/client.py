@@ -1,27 +1,70 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional
+from urllib.parse import urlsplit
 
 import asyncpg
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+# Neon's pooled endpoint is PgBouncer in transaction mode. It only tracks
+# client_encoding, datestyle, timezone, standard_conforming_strings and
+# application_name, and rejects the connection outright with
+# "unsupported startup parameter: search_path" for anything else.
+_POOLED_HOST_MARKER = "-pooler."
+
+
+def _is_pooled_endpoint(database_url: str) -> bool:
+    """True when the DSN points at Neon's PgBouncer endpoint."""
+    hostname = urlsplit(database_url).hostname or ""
+    return _POOLED_HOST_MARKER in hostname
+
 
 class NeonClient:
     """PostgreSQL client for Neon using asyncpg direct connection."""
 
-    def __init__(self, database_url: Optional[str] = None) -> None:
-        self._database_url = database_url or os.getenv("DATABASE_URL", "")
+    def __init__(
+        self,
+        database_url: Optional[str] = None,
+        schema: Optional[str] = None,
+    ) -> None:
+        self._database_url: str = database_url or os.getenv("DATABASE_URL", "")
+        self._schema: str = schema or os.getenv("DB_SCHEMA", "public")
         self._pool: Optional[asyncpg.Pool] = None
+
+    def _server_settings(self) -> dict[str, str]:
+        """search_path for the pool, scoping this service to its own schema."""
+        if not self._schema:
+            return {}
+        if _is_pooled_endpoint(self._database_url):
+            # The pooler would refuse the connection. Fall back to the role's
+            # server-side default, set by
+            # sql/migrations/001_schema_role_isolation.sql via
+            # ALTER ROLE ... SET search_path.
+            logger.warning(
+                "Pooled Neon endpoint in use; DB_SCHEMA=%s is not applied per "
+                "connection. The search_path default of the database role "
+                "applies instead.",
+                self._schema,
+            )
+            return {}
+        return {"search_path": self._schema}
 
     async def _get_pool(self) -> asyncpg.Pool:
         if self._pool is None:
+            # search_path is applied at connection startup, so every connection
+            # the pool hands out is already scoped to this service's schema and
+            # the unqualified table names in the queries resolve there.
             self._pool = await asyncpg.create_pool(
                 self._database_url,
                 min_size=2,
                 max_size=10,
                 ssl="require",
+                server_settings=self._server_settings(),
             )
         return self._pool
 
