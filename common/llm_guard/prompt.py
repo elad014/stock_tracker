@@ -1,7 +1,7 @@
-"""Prompt injection guard shared by every LLM agent.
+"""Prompt injection guard shared by every LLM service.
 
 Fence untrusted text (queries, article bodies, user input) as data, not orders.
-Each agent adds its own task via ``compose_system_prompt``.
+Each service adds its own task via ``compose_system_prompt``.
 """
 
 UNTRUSTED_BEGIN = "<<<UNTRUSTED_DATA>>>"
@@ -25,7 +25,7 @@ def wrap_untrusted(label: str, text: str) -> str:
 
 
 def compose_system_prompt(*task_parts: str) -> str:
-    """System prompt: shared untrusted-data rules, then this agent's task."""
+    """System prompt: shared untrusted-data rules, then this service's task."""
     parts: list[str] = [UNTRUSTED_DATA_RULES]
     for part in task_parts:
         stripped = part.strip()

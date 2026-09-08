@@ -7,14 +7,14 @@ from llm_guard.prompt import compose_system_prompt
 # ---------------------------------------------------------------------------
 # Internal service URLs (inter-service HTTP calls)
 # ---------------------------------------------------------------------------
-STOCK_MANAGER_URL = os.getenv("STOCK_MANAGER_URL", "http://localhost:8001").rstrip("/")
-CHAT_AGENT_URL = os.getenv(
-    "CHAT_AGENT_URL",
+STOCK_SERVICE_URL = os.getenv("STOCK_SERVICE_URL", "http://localhost:8001").rstrip("/")
+CHAT_SERVICE_URL = os.getenv(
+    "CHAT_SERVICE_URL",
     os.getenv("LLM_SERVICE_URL", "http://localhost:8002"),
 ).rstrip("/")
-LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", CHAT_AGENT_URL).rstrip("/")
-NEWS_AGENT_URL = os.getenv("NEWS_AGENT_URL", "http://localhost:8003").rstrip("/")
-DOC_AGENT_URL = os.getenv("DOC_AGENT_URL", "http://localhost:8004").rstrip("/")
+LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", CHAT_SERVICE_URL).rstrip("/")
+NEWS_SERVICE_URL = os.getenv("NEWS_SERVICE_URL", "http://localhost:8003").rstrip("/")
+DOC_SERVICE_URL = os.getenv("DOC_SERVICE_URL", "http://localhost:8004").rstrip("/")
 
 # ---------------------------------------------------------------------------
 # Internal auth (service-to-service API key)
@@ -78,7 +78,7 @@ NEWS_SUMMARIZE_SYSTEM_PROMPT = compose_system_prompt(
 NEWS_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
 ARTICLE_SUMMARIZE_MAX_ATTEMPTS = 20
 ARTICLE_SUMMARIZE_WINDOW_SECONDS = 60
-# Stock-manager HTTP job triggers. Cron is not subject to these cooldowns.
+# Stock-service HTTP job triggers. Cron is not subject to these cooldowns.
 DAILY_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
 CLEANUP_ARCHIVE_HTTP_COOLDOWN_SECONDS = 15 * 60
 
@@ -113,7 +113,7 @@ S3_RESPONSE_CHECKSUM = "when_required"
 S3_FOLDER_PLACEHOLDER = ".emptyFolderPlaceholder"
 
 # ---------------------------------------------------------------------------
-# LLM defaults (chat-agent / LiteLLM)
+# LLM defaults (chat-service / LiteLLM)
 # ---------------------------------------------------------------------------
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"
 DEPRECATED_GEMINI_MODELS = {
@@ -134,7 +134,7 @@ DEPRECATED_GEMINI_MODELS = {
 }
 
 # ---------------------------------------------------------------------------
-# Doc agent (RAG over user documents)
+# Doc Service (RAG over user documents)
 #
 # The embedding model decides the vector width, and the width is baked into the
 # document_vectors column, so a model swap means a re-index. Defaults match the
@@ -179,7 +179,7 @@ DOC_ASK_MAX_ATTEMPTS = 20
 DOC_ASK_WINDOW_SECONDS = 60
 
 # ---------------------------------------------------------------------------
-# Chat agent (orchestrator)
+# Chat Service (orchestrator)
 # ---------------------------------------------------------------------------
 CHAT_MAX_TOOL_ROUNDS = 5
 CHAT_MAX_ATTEMPTS = 20

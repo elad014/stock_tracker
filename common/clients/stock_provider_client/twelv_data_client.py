@@ -18,7 +18,7 @@ load_dotenv()
 
 
 class TwelveDataClient:
-    """Twelve Data REST client used by stock_manager."""
+    """Twelve Data REST client used by stock_service."""
 
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key: str = api_key or os.getenv("TWELVEDATA_API_KEY", "")

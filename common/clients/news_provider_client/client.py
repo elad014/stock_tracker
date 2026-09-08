@@ -20,7 +20,7 @@ load_dotenv()
 
 
 class NewsProviderClient:
-    """Finnhub company-news client used by news_agent."""
+    """Finnhub company-news client used by news_service."""
 
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key: str = api_key or os.getenv("FINNHUB_API_KEY", "")

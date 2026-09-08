@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 import services.documents_service as documents_service
 from db_logics import admin_db_logic as admin_db
 from db_logics import user_db_logic as user_db
-from clients.doc_agent_client import doc_agent_client as doc_agent
+from clients.doc_service_client import doc_service_client as doc_service
 from models.admin import (
     AdminCreateUserRequest,
     AdminSetPasswordRequest,
@@ -17,11 +17,11 @@ from models.admin import (
 from models.auth import MessageResponse
 from models.watchlist import WatchlistStock
 from services.auth_service import hash_password
-from clients.stock_manager_client import stock_manager_client as stock_manager
+from clients.stock_service_client import stock_service_client as stock_service
 
 
 async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
-    stocks = await stock_manager.list_watchlist(user["id"])
+    stocks = await stock_service.list_watchlist(user["id"])
     admin_value: str | None = user.get("admin")
     lock_value: str | None = user.get("lock")
     if admin_value is not None:
@@ -36,7 +36,7 @@ async def _user_with_stocks(user: dict[str, Any]) -> AdminUser:
         admin=admin_value if user_db.is_admin_role(admin_value) else None,
         lock=lock_value if user_db.is_user_locked(lock_value) else None,
         followed_stocks=[
-            WatchlistStock(**stock_manager.quote_to_watchlist_stock(s)) for s in stocks
+            WatchlistStock(**stock_service.quote_to_watchlist_stock(s)) for s in stocks
         ],
     )
 
@@ -135,8 +135,8 @@ async def delete_user(user_id: str) -> MessageResponse:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
     await documents_service.delete_all_user_files(user_id)
-    await doc_agent.purge_user(user_id)
-    await stock_manager.clear_user_watchlist(user_id)
+    await doc_service.purge_user(user_id)
+    await stock_service.clear_user_watchlist(user_id)
     result = await user_db.delete_user(user_id)
     if result == "DELETE 0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -144,8 +144,8 @@ async def delete_user(user_id: str) -> MessageResponse:
 
 
 async def list_stocks() -> list[WatchlistStock]:
-    rows = await stock_manager.list_stocks()
-    return [WatchlistStock(**stock_manager.quote_to_watchlist_stock(row)) for row in rows]
+    rows = await stock_service.list_stocks()
+    return [WatchlistStock(**stock_service.quote_to_watchlist_stock(row)) for row in rows]
 
 
 async def create_stock(req: CreateAdminStockRequest) -> WatchlistStock:
@@ -159,23 +159,23 @@ async def create_stock(req: CreateAdminStockRequest) -> WatchlistStock:
 
     payload: dict[str, Any] | None = None
     for user_id in req.user_ids:
-        existing = await stock_manager.get_stock_by_symbol(req.name)
-        if existing and await stock_manager.is_on_watchlist(user_id, existing["stock_id"]):
+        existing = await stock_service.get_stock_by_symbol(req.name)
+        if existing and await stock_service.is_on_watchlist(user_id, existing["stock_id"]):
             payload = existing
             continue
-        payload = await stock_manager.ensure_and_assign(user_id, req.name)
+        payload = await stock_service.ensure_and_assign(user_id, req.name)
 
     if payload is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Failed to create or assign stock",
         )
-    return WatchlistStock(**stock_manager.quote_to_watchlist_stock(payload))
+    return WatchlistStock(**stock_service.quote_to_watchlist_stock(payload))
 
 
 async def delete_stock(stock_id: str) -> MessageResponse:
-    await stock_manager.get_stock(stock_id)
-    await stock_manager.unwatch_stock_everywhere(stock_id)
+    await stock_service.get_stock(stock_id)
+    await stock_service.unwatch_stock_everywhere(stock_id)
     return MessageResponse(
         message="Stock removed from all watchlists; cleanup will archive history"
     )
@@ -188,8 +188,8 @@ async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> Watchli
 
     symbol = req.symbol
     if not symbol and req.stock_id:
-        stock = await stock_manager.get_stock(req.stock_id)
-        if await stock_manager.is_on_watchlist(user_id, req.stock_id):
+        stock = await stock_service.get_stock(req.stock_id)
+        if await stock_service.is_on_watchlist(user_id, req.stock_id):
             raise HTTPException(status.HTTP_409_CONFLICT, "Stock already on user watchlist")
         symbol = stock["symbol"]
 
@@ -199,8 +199,8 @@ async def assign_stock_to_user(user_id: str, req: AssignStockRequest) -> Watchli
             "Provide stock_id or symbol",
         )
 
-    payload = await stock_manager.ensure_and_assign(user_id, symbol)
-    return WatchlistStock(**stock_manager.quote_to_watchlist_stock(payload))
+    payload = await stock_service.ensure_and_assign(user_id, symbol)
+    return WatchlistStock(**stock_service.quote_to_watchlist_stock(payload))
 
 
 async def remove_stock_from_user(user_id: str, stock_id: str) -> MessageResponse:
@@ -208,5 +208,5 @@ async def remove_stock_from_user(user_id: str, stock_id: str) -> MessageResponse
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
-    await stock_manager.remove_from_watchlist(user_id, stock_id)
+    await stock_service.remove_from_watchlist(user_id, stock_id)
     return MessageResponse(message="Stock removed from user watchlist")

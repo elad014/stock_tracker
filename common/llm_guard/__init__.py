@@ -1,7 +1,7 @@
-"""Shared LLM safety for every agent: prompt fencing and usage limits.
+"""Shared LLM safety for every service: prompt fencing and usage limits.
 
 Not for login/register. Auth throttling stays in ui-service.
-Each agent sets its own numbers and task text; this package stays generic.
+Each service sets its own numbers and task text; this package stays generic.
 """
 
 from llm_guard.job_guard import JobRunGuard

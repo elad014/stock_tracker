@@ -1,6 +1,6 @@
 """Auth-only limiter for login, register, and password reset.
 
-Private to ui-service. Do not import from agents or use for LLM spend.
+Private to ui-service. Do not import from other services or use for LLM spend.
 LLM call limits and prompt fencing live in ``common/llm_guard``.
 """
 
