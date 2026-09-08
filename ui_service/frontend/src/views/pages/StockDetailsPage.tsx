@@ -13,7 +13,7 @@ import {
 import StockNewsArticles from "../components/StockNewsArticles";
 import StockPriceChart from "../components/StockPriceChart";
 
-const HISTORY_RANGES: HistoryRange[] = ["1D", "5D", "1M", "3M", "6M", "1Y", "5Y"];
+const HISTORY_RANGES: HistoryRange[] = ["5D", "1M", "3M", "6M", "1Y", "5Y"];
 
 function formatApiError(err: unknown, fallback: string): string {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response
