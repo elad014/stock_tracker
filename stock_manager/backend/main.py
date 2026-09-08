@@ -5,7 +5,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from database_client import db
+from clients.database_client import db
 from internal_docs import disabled_docs_kwargs, mount_protected_docs
 from jobs.cleanup_archive import run_scheduled_cleanup_archive
 from jobs.daily_update import run_scheduled_daily_update

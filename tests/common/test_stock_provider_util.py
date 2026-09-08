@@ -1,6 +1,6 @@
 from datetime import date
 
-from stock_provider_client.util import parse_date, to_float, to_int
+from clients.stock_provider_client.util import parse_date, to_float, to_int
 
 
 def test_to_float_converts_numeric_values():

@@ -1,6 +1,6 @@
 from typing import Any
 
-from database_client import db
+from clients.database_client import db
 
 USERS_TABLE = "user_auth_data"
 

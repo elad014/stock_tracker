@@ -6,7 +6,7 @@ import requests
 from dotenv import load_dotenv
 
 from constant import TWELVE_DATA_BASE_URL
-from stock_provider_client.util import (
+from .util import (
     OHLCVBar,
     QuoteData,
     parse_date,

@@ -3,8 +3,8 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 
 from models.stocks import StockArticle, StockDetails, StockHistoryBar
-from news_agent_client import news_agent_client as news_agent
-from stock_manager_client import stock_manager_client as stock_manager
+from clients.news_agent_client import news_agent_client as news_agent
+from clients.stock_manager_client import stock_manager_client as stock_manager
 
 
 def _quote_to_stock_details(

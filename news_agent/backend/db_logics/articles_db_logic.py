@@ -7,7 +7,7 @@ from uuid import uuid4
 import asyncpg
 
 from constant import ARTICLE_EXTRACT_MIN_CHARS
-from database_client import db
+from clients.database_client import db
 
 ARTICLES_TABLE = "news_articles"
 STOCK_ARTICLES_TABLE = "stock_articles"

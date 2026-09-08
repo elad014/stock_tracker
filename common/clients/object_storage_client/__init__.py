@@ -1,5 +1,5 @@
-from object_storage_client.client import ObjectStorageClient, object_storage
-from object_storage_client.util import (
+from .client import ObjectStorageClient, object_storage
+from .util import (
     ObjectStorageError,
     StoredObject,
     folder_name,

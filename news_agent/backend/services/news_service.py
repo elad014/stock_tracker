@@ -14,7 +14,7 @@ from constant import (
 )
 from db_logics import articles_db_logic as articles_db
 from llm_guard import guarded_user_message
-from llm_provider_client import LLMProviderClient
+from clients.llm_provider_client import LLMProviderClient
 from models.news import (
     NewsArticle,
     SearchAndSummarizeResponse,
@@ -23,7 +23,7 @@ from models.news import (
     StoredNewsArticle,
     StoredStockNewsResponse,
 )
-from news_provider_client import NewsProviderClient
+from clients.news_provider_client import NewsProviderClient
 
 logger = logging.getLogger(__name__)
 

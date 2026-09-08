@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
-from database_client import db
+from clients.database_client import db
 from db_logics import archive_db_logic as archive_db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
@@ -18,7 +18,7 @@ from models.stocks import (
     StockQuoteResponse,
     StockSummeryResponse,
 )
-from stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
+from clients.stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
 
 _HISTORY_RANGE_DAYS: dict[str, int | None] = {
     "1D": 1,

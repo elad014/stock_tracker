@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from database_client import db
+from clients.database_client import db
 from db_logics.quotes_db_logic import _QUOTE_COLUMNS_Q, _normalize_quote
 
 WATCHLIST_TABLE = "watchlist"

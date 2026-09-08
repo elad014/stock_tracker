@@ -7,15 +7,15 @@ from zoneinfo import ZoneInfo
 
 from constant import ARTICLE_EXTRACT_RETRY_LIMIT, ARTICLE_RETENTION_DAYS
 from llm_limits import news_update_guard
-from llm_provider_client import LLMProviderClient
-from news_provider_client import NewsItem, NewsProviderClient
+from clients.llm_provider_client import LLMProviderClient
+from clients.news_provider_client import NewsItem, NewsProviderClient
 from services.article_service import (
     purge_old_articles,
     retry_missing_article_bodies,
     to_article_payload,
     upsert_stock_articles,
 )
-from stock_manager_client import StockManagerClient
+from clients.stock_manager_client import StockManagerClient
 
 logger = logging.getLogger(__name__)
 
