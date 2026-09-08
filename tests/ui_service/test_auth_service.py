@@ -1,11 +1,15 @@
+import base64
+import os
 from contextlib import asynccontextmanager
 
 import pytest
 from fastapi import HTTPException
-from jose import jwt
 
 from conftest import load_backend_module
 
+
+# token_crypto validates this at import time, so it must be a real 32-byte key.
+os.environ["JWT_SECRET_KEY"] = base64.urlsafe_b64encode(b"\x11" * 32).decode().rstrip("=")
 
 auth_service = load_backend_module("ui_service", "services.auth_service")
 auth_models = load_backend_module("ui_service", "models.auth")
@@ -135,15 +139,11 @@ async def test_login_returns_bearer_token_for_valid_credentials(monkeypatch):
         auth_models.LoginRequest(email="alice@example.com", password="Strong123"),
         "127.0.0.1",
     )
-    payload = jwt.decode(
-        result.access_token,
-        auth_service.JWT_SECRET_KEY,
-        algorithms=[auth_service.ALGORITHM],
-    )
+    claims = auth_service.decode_token(result.access_token, auth_service.ACCESS_TOKEN_TYPE)
 
     assert result.token_type == "bearer"
-    assert payload["sub"] == "alice@example.com"
-    assert payload["user_id"] == "user-1"
+    assert claims["sub"] == "alice@example.com"
+    assert claims["user_id"] == "user-1"
     assert auth_service.login_by_email.reset_keys == ["alice@example.com"]
 
 
@@ -328,3 +328,68 @@ async def test_update_me_email_change_writes_and_returns_new_token(monkeypatch):
         "alice@example.com",
         "new@example.com",
     }
+
+
+def _access_token(**overrides):
+    claims = {
+        "sub": "alice@example.com",
+        "user_id": "user-1",
+        "type": auth_service.ACCESS_TOKEN_TYPE,
+    }
+    claims.update(overrides)
+    return auth_service.create_token(claims, 30)
+
+
+def test_token_is_jwe_and_hides_the_payload():
+    token = _access_token()
+
+    assert token.count(".") == 4
+    assert "alice@example.com" not in token
+    assert "user-1" not in token
+
+
+def test_token_rejects_tampered_ciphertext():
+    header, encrypted_key, iv, ciphertext, tag = _access_token().split(".")
+    flipped = "B" + ciphertext[1:] if ciphertext[0] != "B" else "C" + ciphertext[1:]
+    tampered = ".".join([header, encrypted_key, iv, flipped, tag])
+
+    with pytest.raises(auth_service.TokenError):
+        auth_service.decode_token(tampered, auth_service.ACCESS_TOKEN_TYPE)
+
+
+def test_token_rejects_expired_token():
+    expired = auth_service.create_token(
+        {"sub": "alice@example.com", "type": auth_service.ACCESS_TOKEN_TYPE},
+        -1,
+    )
+
+    with pytest.raises(auth_service.TokenError):
+        auth_service.decode_token(expired, auth_service.ACCESS_TOKEN_TYPE)
+
+
+def test_token_rejects_reset_token_used_as_access_token():
+    reset = auth_service.create_token(
+        {"sub": "alice@example.com", "type": auth_service.RESET_TOKEN_TYPE},
+        15,
+    )
+
+    with pytest.raises(auth_service.TokenError):
+        auth_service.decode_token(reset, auth_service.ACCESS_TOKEN_TYPE)
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_rejects_access_token(monkeypatch):
+    async def fail_update(*_args, **_kwargs):
+        raise AssertionError("password should not be updated")
+
+    monkeypatch.setattr(auth_service, "update_password", fail_update)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_service.password_reset_confirm(
+            auth_models.PasswordResetConfirm(
+                token=_access_token(),
+                new_password="Newpass123",
+            )
+        )
+
+    assert exc_info.value.status_code == 400

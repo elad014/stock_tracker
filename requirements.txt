@@ -3,7 +3,7 @@ uvicorn
 asyncpg
 httpx
 bcrypt
-python-jose[cryptography]
+joserfc
 cryptography
 pydantic[email]
 python-dotenv

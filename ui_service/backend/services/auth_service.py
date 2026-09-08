@@ -1,13 +1,9 @@
 import logging
-import os
-from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import bcrypt
 import httpx
-from dotenv import load_dotenv
 from fastapi import HTTPException, status
-from jose import JWTError, jwt
 
 from db_logics.user_db_logic import (
     create_user,
@@ -38,13 +34,16 @@ from ui_utils.rate_limit import (
     reset_by_email,
     reset_by_ip,
 )
-
-load_dotenv()
+from ui_utils.token_crypto import (
+    ACCESS_TOKEN_TYPE,
+    RESET_TOKEN_TYPE,
+    TokenError,
+    create_token,
+    decode_token,
+)
 
 logger = logging.getLogger(__name__)
 
-JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me")
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 RESET_TOKEN_EXPIRE_MINUTES = 15
 _DUMMY_PASSWORD_HASH: str = bcrypt.hashpw(b"timing-dummy", bcrypt.gensalt()).decode()
@@ -57,12 +56,6 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
-
-
-def create_token(data: dict[str, Any], expires_minutes: int) -> str:
-    to_encode = data.copy()
-    to_encode["exp"] = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
-    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 async def register(req: RegisterRequest, client_ip: str) -> RegisterResponse:
@@ -196,7 +189,7 @@ async def update_me(
     access_token: Optional[str] = None
     if new_email is not None:
         access_token = create_token(
-            {"sub": updated_email, "user_id": user_id},
+            {"sub": updated_email, "user_id": user_id, "type": ACCESS_TOKEN_TYPE},
             ACCESS_TOKEN_EXPIRE_MINUTES,
         )
 
@@ -241,7 +234,7 @@ async def login(req: LoginRequest, client_ip: str) -> Token:
 
     login_by_email.reset(email_key)
     access_token = create_token(
-        {"sub": user["email"], "user_id": str(user["id"])},
+        {"sub": user["email"], "user_id": str(user["id"]), "type": ACCESS_TOKEN_TYPE},
         ACCESS_TOKEN_EXPIRE_MINUTES,
     )
     return Token(access_token=access_token, token_type="bearer")
@@ -265,7 +258,7 @@ async def password_reset_request(
         logger.info("Password reset requested for locked account")
         return MessageResponse(message=_RESET_ACCEPTED)
 
-    token = create_token({"sub": user["email"], "type": "reset"}, RESET_TOKEN_EXPIRE_MINUTES)
+    token = create_token({"sub": user["email"], "type": RESET_TOKEN_TYPE}, RESET_TOKEN_EXPIRE_MINUTES)
     try:
         await mailer.send_password_reset(to=user["email"], reset_token=token)
     except (httpx.HTTPStatusError, httpx.RequestError):
@@ -275,12 +268,14 @@ async def password_reset_request(
 
 async def password_reset_confirm(req: PasswordResetConfirm) -> MessageResponse:
     try:
-        payload = jwt.decode(req.token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") != "reset":
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
-        email: Optional[str] = payload.get("sub")
-    except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset token")
+        claims: dict[str, Any] = decode_token(req.token, RESET_TOKEN_TYPE)
+    except TokenError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Invalid or expired reset token",
+        ) from exc
+
+    email: Optional[str] = claims.get("sub")
 
     if not email or not await get_user_by_email(email):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reset token")
