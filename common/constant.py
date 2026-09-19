@@ -15,6 +15,7 @@ CHAT_SERVICE_URL = os.getenv(
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", CHAT_SERVICE_URL).rstrip("/")
 NEWS_SERVICE_URL = os.getenv("NEWS_SERVICE_URL", "http://localhost:8003").rstrip("/")
 DOC_SERVICE_URL = os.getenv("DOC_SERVICE_URL", "http://localhost:8004").rstrip("/")
+UI_SERVICE_URL = os.getenv("UI_SERVICE_URL", "http://localhost:8000").rstrip("/")
 
 # ---------------------------------------------------------------------------
 # Internal auth (service-to-service API key)
@@ -81,6 +82,7 @@ ARTICLE_SUMMARIZE_WINDOW_SECONDS = 60
 # Stock-service HTTP job triggers. Cron is not subject to these cooldowns.
 DAILY_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
 CLEANUP_ARCHIVE_HTTP_COOLDOWN_SECONDS = 15 * 60
+ALERTS_CHECK_HTTP_COOLDOWN_SECONDS = 1 #15 * 60
 
 # ---------------------------------------------------------------------------
 # Object storage (Supabase Storage over the S3 protocol, or AWS S3)
