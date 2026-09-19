@@ -57,10 +57,10 @@ async def check_and_trigger_alerts() -> list[dict[str, Any]]:
     triggered rows enriched with symbol and current_value.
 
     Trigger conditions (evaluated entirely in SQL — no external API calls):
-      ABSOLUTE ABOVE  →  stock_quotes.close          >= target_value
-      ABSOLUTE BELOW  →  stock_quotes.close          <= target_value
-      PERCENT  ABOVE  →  stock_quotes.percent_change >= target_value
-      PERCENT  BELOW  →  stock_quotes.percent_change <= -ABS(target_value)
+      ABSOLUTE ABOVE  →  stock_quotes.close          >  target_value
+      ABSOLUTE BELOW  →  stock_quotes.close          <  target_value
+      PERCENT  ABOVE  →  stock_quotes.percent_change >  target_value
+      PERCENT  BELOW  →  stock_quotes.percent_change <  -ABS(target_value)
 
     The entire find-and-update is one atomic statement inside a transaction,
     so there are no race conditions between alert evaluation and status update.
@@ -76,18 +76,18 @@ async def check_and_trigger_alerts() -> list[dict[str, Any]]:
               AND sq.close IS NOT NULL
               AND (
                 (sa.alert_type = 'ABSOLUTE' AND sa.direction = 'ABOVE'
-                    AND sq.close >= sa.target_value)
+                    AND sq.close > sa.target_value)
                 OR
                 (sa.alert_type = 'ABSOLUTE' AND sa.direction = 'BELOW'
-                    AND sq.close <= sa.target_value)
+                    AND sq.close < sa.target_value)
                 OR
                 (sa.alert_type = 'PERCENT' AND sa.direction = 'ABOVE'
                     AND sq.percent_change IS NOT NULL
-                    AND sq.percent_change >= sa.target_value)
+                    AND sq.percent_change > sa.target_value)
                 OR
                 (sa.alert_type = 'PERCENT' AND sa.direction = 'BELOW'
                     AND sq.percent_change IS NOT NULL
-                    AND sq.percent_change <= -ABS(sa.target_value))
+                    AND sq.percent_change < -ABS(sa.target_value))
               )
             RETURNING
                 sa.id::text          AS id,
