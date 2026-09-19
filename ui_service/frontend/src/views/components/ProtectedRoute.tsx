@@ -1,5 +1,7 @@
 import { Navigate } from "react-router-dom";
 
+import NotificationBanner from "../components/NotificationBanner";
+
 type ProtectedRouteProps = {
   children: JSX.Element;
 };
@@ -9,5 +11,10 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps): JSX.E
   if (!token) {
     return <Navigate to="/login" replace />;
   }
-  return children;
+  return (
+    <>
+      <NotificationBanner />
+      {children}
+    </>
+  );
 }
