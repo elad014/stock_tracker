@@ -12,6 +12,7 @@ import {
 } from "../../utils/formatters";
 import StockNewsArticles from "../components/StockNewsArticles";
 import StockPriceChart from "../components/StockPriceChart";
+import StockAlertPanel from "../components/StockAlertPanel";
 
 const HISTORY_RANGES: HistoryRange[] = ["5D", "1M", "3M", "6M", "1Y", "5Y"];
 const PAGE_NOT_FOUND = "404 Page not found";
@@ -268,6 +269,8 @@ export default function StockDetailsPage(): JSX.Element {
             ) : null}
 
             <StockNewsArticles stockId={stock.id} />
+
+            <StockAlertPanel stockId={stock.id} />
           </>
         ) : null}
       </main>

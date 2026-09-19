@@ -15,9 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common")
 from clients.database_client import db
 from clients.object_storage_client import ObjectStorageError
 from routers.admin_routes import router as admin_router
+from routers.alerts_routes import router as alerts_router
 from routers.auth_routes import router as auth_router
 from routers.chat_routes import router as chat_router
 from routers.documents_routes import router as documents_router
+from routers.notifications_routes import router as notifications_router
 from routers.stocks_routes import router as stocks_router
 from routers.watchlist_routes import router as watchlist_router
 
@@ -77,6 +79,8 @@ app.include_router(stocks_router)
 app.include_router(admin_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
+app.include_router(alerts_router)
+app.include_router(notifications_router)
 
 FRONTEND_DIR = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
 
