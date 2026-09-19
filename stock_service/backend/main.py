@@ -32,10 +32,11 @@ Use the **Authorize** button in Swagger and paste the same key configured in `.e
 
 ## Responsibilities
 - Validate symbols via Twelve Data
-- Maintain `stock_quotes`, `stock_history`, `watchlist`
+- Maintain `stock_quotes`, `stock_history`, `watchlist`, `stock_alerts`
 - Persist rollup `stock_summery` on `stock_quotes` (written by news-service over HTTP)
 - Restore from `stock_history_archive` when possible
-- Background jobs: daily quote/history update + unwatched cleanup/archive
+- Background jobs: daily quote/history update, unwatched cleanup/archive
+- Alert evaluation is event-driven: runs after every quote upsert (no separate cron)
 """
 
 
@@ -58,7 +59,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Scheduler started (daily=%s, cleanup=%s, tz=%s)", daily_cron, cleanup_cron, tz)
+    logger.info(
+        "Scheduler started (daily=%s, cleanup=%s, tz=%s)",
+        daily_cron,
+        cleanup_cron,
+        tz,
+    )
     try:
         yield
     finally:
@@ -83,11 +89,15 @@ app = FastAPI(
         },
         {
             "name": "Jobs",
-            "description": "Manually trigger scheduled daily-update and cleanup/archive jobs.",
+            "description": "Manually trigger scheduled jobs: daily-update and cleanup/archive.",
         },
         {
             "name": "News",
             "description": "Read/update AI news summaries stored on stock_quotes.stock_summery.",
+        },
+        {
+            "name": "Alerts",
+            "description": "Create and cancel per-user stock price alerts.",
         },
         {
             "name": "Health",

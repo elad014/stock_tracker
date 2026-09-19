@@ -5,6 +5,7 @@ from clients.database_client import db
 from db_logics import history_db_logic as history_db
 from db_logics import quotes_db_logic as quotes_db
 from job_limits import daily_update_guard
+from jobs.alerts_check import run_alerts_check
 from services.stock_service import (
     _fetch_history_gap_best_effort,
     _provider,
@@ -95,6 +96,13 @@ async def run_daily_update(*, force: bool = False) -> None:
         except Exception as exc:
             logger.exception("Daily update failed for %s: %s", symbol, exc)
             continue
+
+    # Event-driven alert evaluation: run immediately after all quotes are fresh.
+    # Errors are isolated so a notification failure never breaks the daily update.
+    try:
+        await run_alerts_check()
+    except Exception as exc:
+        logger.exception("Alert check failed after daily update: %s", exc)
 
 
 async def run_scheduled_daily_update() -> None:

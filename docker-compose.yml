@@ -34,6 +34,7 @@ services:
       - ./common:/app/common
     environment:
       - PYTHONPATH=/app/common:/app/backend
+      - UI_SERVICE_URL=http://ui-service:8000
     restart: unless-stopped
 
   chat-service:
