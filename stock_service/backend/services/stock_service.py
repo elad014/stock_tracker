@@ -19,7 +19,6 @@ from models.stocks import (
     StockSummeryResponse,
 )
 from clients.stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
-from jobs.alerts_check import run_alerts_check
 
 _HISTORY_RANGE_DAYS: dict[str, int | None] = {
     "1D": 1,
@@ -435,7 +434,10 @@ async def add_to_watchlist(user_id: str, symbol: str) -> StockQuoteResponse:
         result = await _create_new_and_watch(user_id, quote)
 
     # Event-driven: evaluate alerts immediately after the fresh quote is persisted.
+    # Import is deferred to break the circular dependency:
+    #   stock_service → jobs.alerts_check → jobs/__init__ → daily_update → stock_service
     try:
+        from jobs.alerts_check import run_alerts_check  # noqa: PLC0415
         await run_alerts_check()
     except Exception as exc:
         logger.exception("Alert check failed after watchlist add for %s: %s", symbol, exc)
