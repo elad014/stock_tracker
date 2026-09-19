@@ -82,7 +82,7 @@ ARTICLE_SUMMARIZE_WINDOW_SECONDS = 60
 # Stock-service HTTP job triggers. Cron is not subject to these cooldowns.
 DAILY_UPDATE_HTTP_COOLDOWN_SECONDS = 15 * 60
 CLEANUP_ARCHIVE_HTTP_COOLDOWN_SECONDS = 15 * 60
-ALERTS_CHECK_HTTP_COOLDOWN_SECONDS = 1 #15 * 60
+ALERTS_CHECK_HTTP_COOLDOWN_SECONDS = 15 * 60
 
 # ---------------------------------------------------------------------------
 # Object storage (Supabase Storage over the S3 protocol, or AWS S3)
