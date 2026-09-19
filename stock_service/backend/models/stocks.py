@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -117,3 +117,37 @@ class MessageResponse(BaseModel):
 class JobTriggerResponse(BaseModel):
     message: str
     job: str
+
+
+# ---------------------------------------------------------------------------
+# Stock Price Alerts
+# ---------------------------------------------------------------------------
+
+
+class CreateAlertRequest(BaseModel):
+    user_id: str
+    stock_id: str
+    alert_type: Literal["PERCENT", "ABSOLUTE"]
+    target_value: float
+    direction: Literal["ABOVE", "BELOW"]
+
+
+class AlertResponse(BaseModel):
+    id: str
+    user_id: str
+    stock_id: str
+    alert_type: str
+    target_value: float
+    direction: str
+    status: str
+    created_at: datetime
+
+
+class TriggerAlertPayload(BaseModel):
+    user_id: str
+    stock_id: str
+    symbol: str
+    alert_type: str
+    direction: str
+    target_value: float
+    current_value: float

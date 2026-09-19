@@ -19,6 +19,7 @@ from models.stocks import (
     StockSummeryResponse,
 )
 from clients.stock_provider_client import OHLCVBar, QuoteData, TwelveDataClient
+from jobs.alerts_check import run_alerts_check
 
 _HISTORY_RANGE_DAYS: dict[str, int | None] = {
     "1D": 1,
@@ -427,13 +428,19 @@ async def add_to_watchlist(user_id: str, symbol: str) -> StockQuoteResponse:
 
     existing = await quotes_db.get_by_symbol(symbol)
     if existing is not None:
-        return await _refresh_existing_and_watch(user_id, existing, quote)
+        result = await _refresh_existing_and_watch(user_id, existing, quote)
+    elif (archived := await archive_db.get_archived_stock_by_symbol(symbol)) is not None:
+        result = await _restore_archived_and_watch(user_id, archived, quote)
+    else:
+        result = await _create_new_and_watch(user_id, quote)
 
-    archived = await archive_db.get_archived_stock_by_symbol(symbol)
-    if archived is not None:
-        return await _restore_archived_and_watch(user_id, archived, quote)
+    # Event-driven: evaluate alerts immediately after the fresh quote is persisted.
+    try:
+        await run_alerts_check()
+    except Exception as exc:
+        logger.exception("Alert check failed after watchlist add for %s: %s", symbol, exc)
 
-    return await _create_new_and_watch(user_id, quote)
+    return result
 
 
 async def remove_from_watchlist(user_id: str, stock_id: str) -> MessageResponse:

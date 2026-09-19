@@ -2,11 +2,15 @@ from fastapi import APIRouter, Depends, Path, Query, status
 
 from internal_auth import verify_internal_api_key
 from job_limits import cleanup_archive_guard, daily_update_guard
+from jobs.alerts_check import run_alerts_check
 from jobs.cleanup_archive import run_cleanup_archive
 from jobs.daily_update import run_daily_update
 import services.stock_service as stock_service
+from db_logics import alerts_db_logic as alerts_db
 from models.stocks import (
     AddWatchlistRequest,
+    AlertResponse,
+    CreateAlertRequest,
     JobTriggerResponse,
     MessageResponse,
     RemoveWatchlistRequest,
@@ -277,3 +281,68 @@ async def trigger_cleanup_archive() -> JobTriggerResponse:
         job="cleanup-archive",
         message="Cleanup/archive job completed",
     )
+
+
+@router.post(
+    "/jobs/alerts-check",
+    tags=["Jobs"],
+    summary="Trigger alerts check",
+    description=(
+        "Manually runs the alerts-check: evaluates all PENDING alerts against "
+        "current stock_quotes data and fires notifications for any that are triggered.\n\n"
+        "Alert evaluation is normally event-driven (after every quote upsert). "
+        "Use this endpoint to trigger it on demand."
+    ),
+    response_model=JobTriggerResponse,
+)
+async def trigger_alerts_check() -> JobTriggerResponse:
+    await run_alerts_check()
+    return JobTriggerResponse(
+        job="alerts-check",
+        message="Alerts check completed",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Internal Alerts endpoints (called by ui-service)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/internal/alerts",
+    tags=["Alerts"],
+    summary="Create a price alert",
+    description="Create a new PENDING price alert for a stock. Called by ui-service.",
+    response_model=AlertResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_alert(req: CreateAlertRequest) -> AlertResponse:
+    alert = await alerts_db.create_alert(
+        user_id=req.user_id,
+        stock_id=req.stock_id,
+        alert_type=req.alert_type,
+        target_value=req.target_value,
+        direction=req.direction,
+    )
+    return AlertResponse(**alert)
+
+
+@router.delete(
+    "/internal/alerts/{alert_id}",
+    tags=["Alerts"],
+    summary="Cancel a price alert",
+    description="Cancel a PENDING alert.  Returns 404 if not found or already triggered.",
+    response_model=AlertResponse,
+)
+async def cancel_alert(
+    alert_id: str = Path(..., description="UUID of the alert to cancel"),
+    user_id: str = Query(..., description="UUID of the owning user"),
+) -> AlertResponse:
+    alert = await alerts_db.cancel_alert(alert_id=alert_id, user_id=user_id)
+    if alert is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found or already resolved",
+        )
+    return AlertResponse(**alert)
