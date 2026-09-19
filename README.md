@@ -17,7 +17,7 @@ Home-page quotes are an illustrative snapshot, not live brokerage data. Signed-i
 
 ## Architecture
 
-Five Docker services share one Neon PostgreSQL database (plus pgvector for documents). The UI service is the only public API. Internal services talk over HTTP with `X-Internal-Api-Key`.
+Five Docker services share one Neon PostgreSQL database, isolated by Postgres schema and login role (plus pgvector for documents). The UI service is the only public API. Internal services talk over HTTP with `X-Internal-Api-Key`.
 
 ```
 Browser
@@ -37,7 +37,7 @@ Chat-service calls the other three internal services. News-service writes stock 
 | Frontend | React 18, TypeScript, Vite 5, React Router 6, Axios |
 | Backend | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
 | Database | PostgreSQL (Neon), pgvector |
-| Auth | bcrypt, encrypted JWT / JWE (`joserfc`) |
+| Auth | bcrypt, encrypted JWE (`joserfc`, `dir` + `A256GCM`) |
 | Email | Resend |
 | Object storage | Supabase Storage over the S3 protocol (`boto3`) |
 | Market data | Twelve Data |
@@ -52,11 +52,13 @@ Chat-service calls the other three internal services. News-service writes stock 
 stock_tracker/
 ├── docker-compose.yml
 ├── requirements.txt
+├── sql/migrations/      # Neon schema/role isolation
+├── documentary/         # Per-service technical specs
 ├── ui_service/          # Public SPA + BFF (port 8000)
 ├── stock_service/       # Quotes, history, watchlist (port 8001)
-├── chat_service/          # Chat orchestrator (port 8002)
-├── news_service/          # News fetch and summaries (port 8003)
-├── doc_service/           # PDF embeddings and RAG (port 8004)
+├── chat_service/        # Chat orchestrator (port 8002)
+├── news_service/        # News fetch and summaries (port 8003)
+├── doc_service/         # PDF embeddings and RAG (port 8004)
 └── common/              # Shared clients, constants, and guards
 ```
 
@@ -76,12 +78,13 @@ stock_tracker/
 
 ## Public API (ui-service)
 
-JWT is required except for register, login, and password reset.
+A Bearer token is required except for register, login, public-key, and password reset. Access tokens are compact JWE (`dir` + `A256GCM`), not HS256.
 
 | Method | Path | Description |
 | --- | --- | --- |
 | POST | `/auth/register` | Create an account |
-| POST | `/auth/login` | Sign in and receive a JWT |
+| GET | `/auth/public-key` | RSA JWK for login payload wrapping |
+| POST | `/auth/login` | Sign in (encrypted payload) and receive a JWE |
 | GET | `/auth/me` | Current user |
 | PUT | `/auth/me` | Update profile or password |
 | POST | `/auth/password-reset-request` | Request a reset email |
@@ -111,12 +114,21 @@ Internal services expose their own `/health` plus API-key-protected `/docs`.
 | Upload size | 20 MB |
 | Document indexes per rolling 7 days | 20 |
 | Chat session history | 20 messages |
-| JWT lifetime | 30 minutes |
+| Access token lifetime | 30 minutes |
 | Password-reset token | 15 minutes |
 
 ## Database tables
 
-`user_auth_data`, `stock_quotes`, `stock_history`, `stock_history_archive`, `watchlist`, `news_articles`, `stock_articles`, `document_vectors`, `document_ingest_quota`.
+One Neon database, four schemas:
+
+| Schema (role) | Tables |
+| --- | --- |
+| `ui_schema` (`ui_db_user`) | `user_auth_data` |
+| `stock_schema` (`stock_db_user`) | `stock_quotes`, `stock_history`, `stock_history_archive`, `watchlist` |
+| `news_schema` (`news_db_user`) | `news_articles`, `stock_articles` (plus `SELECT` on `stock_schema.stock_quotes`) |
+| `doc_schema` (`doc_db_user`) | `document_vectors`, `document_ingest_quota` |
+
+Roles, grants, and the move off `public` are in `sql/migrations/001_schema_role_isolation.sql`. See `documentary/database-architecture.md`.
 
 ## Getting started
 
@@ -136,7 +148,7 @@ Copy each example file to `.env` in the same folder and fill in real values:
 - `news_service/backend/.env.example`
 - `doc_service/backend/.env.example`
 
-`INTERNAL_API_KEY` must match across services. `DATABASE_URL` is used by ui-service, stock-service, news-service, and doc-service. Chat-service has no database. Ui-service and doc-service must use the same S3 bucket for user PDFs.
+`INTERNAL_API_KEY` must match across services. Each DB-using service has its own `DATABASE_URL` (as `ui_db_user`, `stock_db_user`, `news_db_user`, or `doc_db_user`) and `DB_SCHEMA`. Use the **direct** Neon host, not the `-pooler.` endpoint. Chat-service has no database. Ui-service and doc-service must use the same S3 bucket for user PDFs.
 
 ### Run with Docker
 

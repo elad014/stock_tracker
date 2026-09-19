@@ -32,7 +32,7 @@ class TwelveDataClient:
         endpoint: str,
         params: dict[str, Any] | None = None,
         method: str = "GET",
-    ) -> dict[str, Any]:
+    ) -> Any:
         url = f"{TWELVE_DATA_BASE_URL}/{endpoint.lstrip('/')}"
         query_params: dict[str, Any] = dict(params or {})
         query_params["apikey"] = self.api_key
@@ -53,9 +53,12 @@ class TwelveDataClient:
                 raise RuntimeError(f"Symbol not found: {symbol}") from None
             raise RuntimeError(f"Twelve Data HTTP {status_code}") from None
 
-        data: dict[str, Any] = response.json()
+        data: Any = response.json()
 
-        if data.get("status") == "error":
+        # market_state and a few other endpoints return a JSON array instead of
+        # an object — skip the error-status check in that case; the caller is
+        # responsible for handling lists (e.g. is_market_open already does this).
+        if isinstance(data, dict) and data.get("status") == "error":
             code = data.get("code")
             message = str(data.get("message") or "Unknown error")
             message_lower = message.lower()

@@ -99,4 +99,38 @@ class EmailClient:
         return await self.send(to=to, subject=subject, html=html)
 
 
+    async def send_alert_triggered(
+        self,
+        to: str,
+        symbol: str,
+        alert_type: str,
+        direction: str,
+        target_value: float,
+        current_value: float,
+    ) -> dict:
+        """Send a stock-alert triggered notification email."""
+        subject = f"Stock Alert Triggered: {symbol}"
+        direction_label = "above" if direction == "ABOVE" else "below"
+        if alert_type == "PERCENT":
+            trigger_line = (
+                f"<strong>{symbol}</strong> has moved {current_value:+.2f}% today, "
+                f"{'surpassing' if direction == 'ABOVE' else 'falling below'} "
+                f"your {target_value:+.2f}% target."
+            )
+        else:
+            trigger_line = (
+                f"<strong>{symbol}</strong> is currently trading at "
+                f"<strong>${current_value:.2f}</strong>, which is {direction_label} "
+                f"your target of <strong>${target_value:.2f}</strong>."
+            )
+        html = (
+            "<h2>Stock Alert Triggered</h2>"
+            f"<p>{trigger_line}</p>"
+            "<p>Log in to Stock Tracker to review your portfolio.</p>"
+            "<p style='color:#888;font-size:12px;'>You are receiving this email because "
+            "you set a price alert on Stock Tracker.</p>"
+        )
+        return await self.send(to=to, subject=subject, html=html)
+
+
 mailer = EmailClient()

@@ -200,4 +200,41 @@ class StockServiceClient:
         }
 
 
+    async def create_alert(
+        self,
+        user_id: str,
+        stock_id: str,
+        alert_type: str,
+        target_value: float,
+        direction: str,
+    ) -> dict[str, Any]:
+        """POST /internal/alerts — create a new price alert in stock-service."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base_url}/internal/alerts",
+                headers=self._headers(),
+                json={
+                    "user_id": user_id,
+                    "stock_id": stock_id,
+                    "alert_type": alert_type,
+                    "target_value": target_value,
+                    "direction": direction,
+                },
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+    async def cancel_alert(self, alert_id: str) -> dict[str, Any]:
+        """DELETE /internal/alerts/{alert_id} — cancel an existing alert."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{self._base_url}/internal/alerts/{alert_id}",
+                headers=self._headers(),
+            )
+        if response.status_code >= 400:
+            self._raise_from_response(response)
+        return response.json()
+
+
 stock_service_client = StockServiceClient()
