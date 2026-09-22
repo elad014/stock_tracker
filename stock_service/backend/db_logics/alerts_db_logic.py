@@ -53,8 +53,11 @@ async def create_alert(
 
 async def check_and_trigger_alerts() -> list[dict[str, Any]]:
     """Atomically find all PENDING alerts whose conditions are met based on
-    the current data in stock_quotes, mark them TRIGGERED, and return the
-    triggered rows enriched with symbol and current_value.
+    the current data in stock_quotes, claim them as TRIGGERED, and return the
+    claimed rows enriched with symbol and current_value.
+
+    TRIGGERED is only a claim so a second check cannot fire the same alert.
+    The caller deletes the row after the notification is delivered.
 
     Trigger conditions (evaluated entirely in SQL — no external API calls):
       ABSOLUTE ABOVE  →  stock_quotes.close          >  target_value
@@ -105,6 +108,47 @@ async def check_and_trigger_alerts() -> list[dict[str, Any]]:
             conn=conn,
         )
     return rows
+
+
+async def delete_alert(
+    alert_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> bool:
+    """Remove an alert after its notification has been delivered."""
+    result = await db.execute(
+        f"""
+        DELETE FROM {ALERTS_TABLE}
+        WHERE id = $1::uuid
+        """,
+        alert_id,
+        conn=conn,
+    )
+    return _rows_affected(result) > 0
+
+
+async def reopen_alert(
+    alert_id: str,
+    conn: Optional[asyncpg.Connection] = None,
+) -> bool:
+    """Return a claimed alert to PENDING when notification delivery failed."""
+    result = await db.execute(
+        f"""
+        UPDATE {ALERTS_TABLE}
+        SET status = 'PENDING'
+        WHERE id = $1::uuid AND status = 'TRIGGERED'
+        """,
+        alert_id,
+        conn=conn,
+    )
+    return _rows_affected(result) > 0
+
+
+def _rows_affected(result: str) -> int:
+    """Parse asyncpg's 'DELETE N' / 'UPDATE N' command tag into a row count."""
+    try:
+        return int(result.split()[-1])
+    except (AttributeError, ValueError, IndexError):
+        return 0
 
 
 async def cancel_alert(

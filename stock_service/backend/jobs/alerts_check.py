@@ -11,12 +11,13 @@ async def run_alerts_check() -> None:
     """Evaluate all PENDING price alerts against current stock_quotes data.
 
     Called after every quote upsert (end of daily-update and after a user adds a
-    new stock).  No external API calls are made — trigger conditions are evaluated
-    entirely inside a single atomic SQL statement that joins stock_alerts with
-    stock_quotes and returns the rows that were just marked TRIGGERED.
+    new stock). Trigger conditions are evaluated inside a single atomic SQL
+    statement that joins stock_alerts with stock_quotes and claims matching
+    rows as TRIGGERED so a second run cannot fire the same alert twice.
 
-    Notification delivery to ui-service is best-effort: a failure for one alert
-    is logged but does not prevent the remaining alerts from being dispatched.
+    After ui-service accepts the notification, the alert row is deleted.
+    If delivery fails, the row is returned to PENDING so the next check can
+    try again. A failure for one alert does not stop the remaining alerts.
     """
     triggered = await alerts_db.check_and_trigger_alerts()
 
@@ -36,4 +37,14 @@ async def run_alerts_check() -> None:
             target_value=alert["target_value"],
             current_value=alert["current_value"],
         )
-        await ui_service_client.trigger_alert(payload.model_dump())
+        delivered = await ui_service_client.trigger_alert(payload.model_dump())
+        alert_id = str(alert["id"])
+        if delivered:
+            await alerts_db.delete_alert(alert_id)
+            logger.info("alerts_check: deleted alert %s after notification", alert_id)
+        else:
+            await alerts_db.reopen_alert(alert_id)
+            logger.warning(
+                "alerts_check: notification failed for alert %s; left PENDING",
+                alert_id,
+            )

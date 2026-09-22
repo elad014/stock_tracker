@@ -26,11 +26,12 @@ class UiServiceClient:
     def _headers(self) -> dict[str, str]:
         return {INTERNAL_API_KEY_HEADER: self._api_key}
 
-    async def trigger_alert(self, payload: dict[str, Any]) -> None:
+    async def trigger_alert(self, payload: dict[str, Any]) -> bool:
         """POST /api/v1/internal/alerts/trigger.
 
-        Logs errors but does not raise so that one failed notification does not
-        prevent the remaining triggered alerts from being dispatched.
+        Returns True when ui-service accepted the notification. Logs errors
+        but does not raise so that one failed notification does not prevent
+        the remaining triggered alerts from being dispatched.
         """
         url = f"{self._base_url}/api/v1/internal/alerts/trigger"
         try:
@@ -46,10 +47,14 @@ class UiServiceClient:
                     response.status_code,
                     response.text[:200],
                 )
+                return False
+            return True
         except httpx.RequestError as exc:
             logger.error("trigger_alert: request to ui-service failed: %s", exc)
+            return False
         except Exception as exc:
             logger.exception("trigger_alert: unexpected error: %s", exc)
+            return False
 
 
 ui_service_client = UiServiceClient()
