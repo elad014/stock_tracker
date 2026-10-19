@@ -20,11 +20,14 @@ CHAT_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "ask_user_document",
             "description": (
-                "Search the user's uploaded PDF documents only. Use this when "
-                "they ask about a document, file, PDF, filing, or uploaded "
-                "report. Do not use this for news or article questions. "
+                "Search the user's uploaded PDF documents. Use this for a "
+                "document, file, PDF, filing, or report, and also before "
+                "saying you cannot find a fact about a company or person. "
+                "Do not ask the user to name a topic. "
                 "Pass document_id only if they named a specific file. "
-                "Omit document_id to search all of their documents."
+                "Omit document_id to search all of their documents. "
+                "Call this once per distinct filing topic, in the same round "
+                "as the other tools. Put only that topic in query."
             ),
             "parameters": {
                 "type": "object",
@@ -38,7 +41,10 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                     },
                     "query": {
                         "type": "string",
-                        "description": "The user's question about the document",
+                        "description": (
+                            "The fact to look up. Use the user's question "
+                            "when they did not name separate topics."
+                        ),
                     },
                 },
                 "required": ["query"],
@@ -53,9 +59,11 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                 "Ask news-service about stored news_articles.text for a ticker. "
                 "News-service searches and ranks article bodies, returns matching "
                 "sentences plus article text, and may add an LLM analysis. "
-                "Use this for news or article questions. Pass query as the "
-                "user's question. Convert company names to tickers "
-                "(Alibaba is BABA, Nvidia is NVDA)."
+                "Use this for news or article questions, and also before "
+                "saying you cannot find a fact about a company or person. "
+                "Pass query as the user's question. Convert company names "
+                "and executives to tickers (Alibaba is BABA, Nvidia and "
+                "Jen-Hsun Huang are NVDA)."
             ),
             "parameters": {
                 "type": "object",
@@ -83,7 +91,9 @@ CHAT_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Get the current quote and stored stock summary. Use this when "
                 "the user asks about the stock itself (price, change, how it "
-                "is doing), including together with news and documents."
+                "is doing), including together with news and documents. "
+                "Also call it before saying you cannot find a fact when a "
+                "ticker can be inferred."
             ),
             "parameters": {
                 "type": "object",

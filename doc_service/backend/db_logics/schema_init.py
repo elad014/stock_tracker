@@ -118,6 +118,7 @@ async def ensure_vector_schema() -> None:
                 ON document_vectors USING hnsw (embedding vector_cosine_ops)
             """
         )
+        await db.execute("DROP INDEX IF EXISTS idx_doc_vectors_content_fts")
         await db.execute("DROP TABLE IF EXISTS document_ingest_events")
         await _ensure_ingest_quota_table()
     except Exception:

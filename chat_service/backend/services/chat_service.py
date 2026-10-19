@@ -62,14 +62,30 @@ def _build_chat_messages(
         {
             "role": "user",
             "content": guarded_user_message(
-                "Answer the user's message using only the tools that match "
-                "the question. News or articles: get_stock_news_summary "
+                "Before saying you cannot find the answer, search documents, "
+                "news, and the stock quote in the same round. Do not ask the "
+                "user for a topic. If one service contains the fact, answer "
+                "from that service only. Say you do not know only when all "
+                "three return nothing relevant. "
+                "News or articles: get_stock_news_summary "
                 "(returns analysis plus SOURCE EVIDENCE). Uploaded documents: "
-                "ask_user_document. The stock itself: get_stock_price. "
-                "If they ask about more than one of those, call every matching tool. "
-                "Compose the reply from SOURCE EVIDENCE, SOURCE EXCERPTS, and "
-                "quotes first. Treat other-service answers as analysis only. "
+                "ask_user_document once per distinct filing topic, with only that "
+                "topic in query. The stock itself: get_stock_price. "
+                "If they ask about more than one of those, call every matching tool "
+                "in the same round. "
+                "Compose the reply from article sentences, document excerpts, "
+                "and quotes. Treat other-service answers as analysis only. "
                 "For factual article questions, use matching sentences. "
+                "Reply in one sentence per source, three sentences at most. "
+                "Each sentence must state the fact that source returned. "
+                "If the excerpts contain the topic, use them. "
+                "Do not say a source lacks the topic when its text contains it. "
+                "Write in plain language and do not print tool section names. "
+                "Name the period of every figure. Say one source confirms "
+                "another only when both results contain that point. "
+                "If excerpts do not mention a topic, say the retrieved excerpts "
+                "do not cover it. Do not say the filing does not address it, "
+                "and do not substitute a different excerpt. "
                 "Do not invent facts that are not in the tool results.",
                 ("USER_MESSAGE", user_message),
             ),
