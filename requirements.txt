@@ -11,6 +11,7 @@ python-multipart
 requests
 apscheduler
 litellm
+mcp>=2.2.0,<3
 trafilatura
 boto3
 pymupdf==1.28.2
