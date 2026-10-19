@@ -22,6 +22,10 @@ export default function HelpPage(): JSX.Element {
             <li>Sign in with your email and password.</li>
             <li>Add tickers to your watchlist on the dashboard.</li>
             <li>Open a stock for charts, market data, and news.</li>
+            <li>
+              On a stock page, set a price alert if you want an email and an
+              in-app notice when the price condition is met.
+            </li>
             <li>Upload PDFs and use Chat to ask about your files or watchlist.</li>
           </ol>
         </section>
@@ -84,9 +88,29 @@ export default function HelpPage(): JSX.Element {
               Latest articles with source and date. Use Summarize article to
               generate an AI summary for that story.
             </li>
+            <li>
+              A price alert for that stock. Choose an absolute dollar price or
+              a percent change, and whether it fires above or below your
+              target.
+            </li>
           </ul>
           <p>
-            You can only open stocks that are on your watchlist.
+            You can only open stocks that are on your watchlist. Alerts use
+            the same rule.
+          </p>
+        </section>
+
+        <section className="help-section">
+          <h2>Price alerts</h2>
+          <p>
+            Set an alert from the stock page. When the latest quote meets the
+            condition, Stock Tracker sends an email and shows a banner in the
+            app. Dismiss the banner to mark that notice read.
+          </p>
+          <p>
+            Each alert notifies you once. If the notice cannot be delivered,
+            the alert stays active and is tried again after the next quote
+            update.
           </p>
         </section>
 

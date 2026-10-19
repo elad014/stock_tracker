@@ -8,6 +8,7 @@ The app is **not** an investment advisory tool. Market data, news summaries, and
 
 - Create an account, sign in, reset a forgotten password, and update profile settings.
 - Build a watchlist of Twelve Data tickers and view price, change, history charts, and market stats.
+- Set a price alert on a followed stock (a dollar price or a percent change, above or below a target). A match sends an email and an in-app banner.
 - Read Finnhub news per stock, with optional AI article summaries and a stock-level news rollup.
 - Upload PDFs, organize them in folders, and ask questions over those files (RAG).
 - Chat from the dashboard; the assistant can use stock quotes, news, and your documents.
@@ -22,13 +23,14 @@ Five Docker services share one Neon PostgreSQL database, isolated by Postgres sc
 ```
 Browser
   -> ui-service :8000   React SPA + FastAPI (JWT)
-       -> stock-service :8001   quotes, history, watchlist
+       -> stock-service :8001   quotes, history, watchlist, price alerts
        -> news-service    :8003   Finnhub articles + LLM summaries
        -> doc-service     :8004   PDF ingest, embeddings, RAG
        -> chat-service    :8002   LiteLLM orchestrator (no database)
+stock-service -> ui-service       alert fired: in-app notification + email
 ```
 
-Chat-service calls the other three internal services. News-service writes stock rollup summaries through stock-service. Doc-service reads PDFs from the same object-storage bucket that ui-service writes to.
+Chat-service calls the other three internal services. News-service writes stock rollup summaries through stock-service. After a quote update, stock-service checks pending price alerts and, when one matches, calls ui-service. Ui-service stores the in-app notification and sends the email. Doc-service reads PDFs from the same object-storage bucket that ui-service writes to.
 
 ## Tech stack
 
@@ -93,6 +95,7 @@ A Bearer token is required except for register, login, public-key, and password 
 | DELETE | `/watchlist/{stock_id}` | Remove a followed stock |
 | GET | `/stocks/{stock_id}` | Quote and summary |
 | GET | `/stocks/{stock_id}/history` | History (`range=1D` … `5Y`) |
+| POST | `/stocks/{stock_id}/alerts` | Create a price alert for a watchlist stock |
 | GET | `/stocks/{stock_id}/articles` | Stored news articles |
 | POST | `/stocks/{stock_id}/articles/{article_id}/summarize` | Summarize one article |
 | GET | `/documents/tree` | Folder and file tree |
@@ -102,6 +105,8 @@ A Bearer token is required except for register, login, public-key, and password 
 | DELETE | `/documents/files` | Delete a file |
 | POST/DELETE | `/documents/folders` | Create or delete a folder |
 | POST | `/chat` | Ask the assistant |
+| GET | `/notifications` | Unread in-app notifications |
+| PUT | `/notifications/{notification_id}/read` | Mark a notification read |
 | GET/POST/PUT/DELETE | `/admin/*` | Admin user and stock tools |
 
 Internal services expose their own `/health` plus API-key-protected `/docs`.
@@ -123,12 +128,12 @@ One Neon database, four schemas:
 
 | Schema (role) | Tables |
 | --- | --- |
-| `ui_schema` (`ui_db_user`) | `user_auth_data` |
-| `stock_schema` (`stock_db_user`) | `stock_quotes`, `stock_history`, `stock_history_archive`, `watchlist` |
+| `ui_schema` (`ui_db_user`) | `user_auth_data`, `in_app_notifications` |
+| `stock_schema` (`stock_db_user`) | `stock_quotes`, `stock_history`, `stock_history_archive`, `watchlist`, `stock_alerts` |
 | `news_schema` (`news_db_user`) | `news_articles`, `stock_articles` (plus `SELECT` on `stock_schema.stock_quotes`) |
 | `doc_schema` (`doc_db_user`) | `document_vectors`, `document_ingest_quota` |
 
-Roles, grants, and the move off `public` are in `sql/migrations/001_schema_role_isolation.sql`. See `documentary/database-architecture.md`.
+Roles, grants, and the move off `public` are in `sql/migrations/001_schema_role_isolation.sql`. Alert and notification DDL are in `stock_service/sql/stock_alerts.sql` and `ui_service/sql/in_app_notifications.sql`. See `documentary/database-architecture.md`.
 
 ## Getting started
 
@@ -194,7 +199,7 @@ Vite starts at `http://localhost:5173`.
 
 | Role | Capabilities |
 | --- | --- |
-| User | Account, watchlist, stock details, documents, news, chat, settings |
+| User | Account, watchlist, stock details, price alerts, documents, news, chat, settings |
 | Admin | Everything a user can do, plus manage users, locks, stocks, and watchlist assignments |
 
-Deleting a user from admin removes that account’s S3 files, vectors, ingest quota, and watchlist rows.
+Deleting a user from admin removes that account’s S3 files, vectors, ingest quota, watchlist rows, and in-app notifications.
