@@ -18,6 +18,7 @@ import {
 } from "../../services/documentService";
 import { chatErrorMessage, sendChatMessage } from "../../services/chatService";
 import DocumentTree from "../components/DocumentTree";
+import StockMark, { markColorForIndex } from "../components/StockMark";
 import type { DocumentTree as DocumentTreeData, TreeNode } from "../../models/documents";
 import type { WatchlistStock } from "../../models/watchlist";
 import {
@@ -324,6 +325,13 @@ export default function DashboardPage(): JSX.Element {
     }
   }
 
+  const markColorById = new Map<string, string>(
+    stocks.map((stock: WatchlistStock, index: number) => [
+      stock.id,
+      markColorForIndex(index),
+    ]),
+  );
+
   const visibleNews: NewsItem[] = stocks
     .filter(
       (stock: WatchlistStock) =>
@@ -545,7 +553,15 @@ export default function DashboardPage(): JSX.Element {
                       role="link"
                       aria-label={`Open details for ${stock.symbol}`}
                     >
-                      <td className="symbol-cell">{stock.symbol}</td>
+                      <td className="symbol-cell">
+                        <span className="symbol-with-mark">
+                          <StockMark
+                            symbol={stock.symbol}
+                            color={markColorById.get(stock.id) ?? markColorForIndex(0)}
+                          />
+                          {stock.symbol}
+                        </span>
+                      </td>
                       <td>{formatPrice(stock.price)}</td>
                       <td className={changeClassName(stock.change)}>
                         {formatChange(stock.change)}
@@ -566,7 +582,13 @@ export default function DashboardPage(): JSX.Element {
             <ul className="news-list">
               {visibleNews.map((item: NewsItem) => (
                 <li key={item.id} className="news-item">
-                  <span className="news-symbol">{item.relatedSymbol}</span>
+                  <span className="news-symbol">
+                    <StockMark
+                      symbol={item.relatedSymbol}
+                      color={markColorById.get(item.id) ?? markColorForIndex(0)}
+                    />
+                    {item.relatedSymbol}
+                  </span>
                   <p className="news-headline">{item.headline}</p>
                 </li>
               ))}
