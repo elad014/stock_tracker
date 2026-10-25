@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from internal_auth import verify_internal_api_key
 from jobs.news_update import run_news_update
@@ -29,7 +29,8 @@ router = APIRouter(
         "Stocks with no news today, or with no new URLs, skip the LLM. "
         "Failures on one stock do not stop the rest.\n\n"
         "The hourly scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
-        "and at most once per 15 minutes, so a stolen key cannot loop LLM spend."
+        "and at most once per 15 minutes. force=true skips the 15-minute cooldown "
+        "(a run that is already in progress still returns 409)."
     ),
     response_model=JobTriggerResponse,
     responses={
@@ -37,8 +38,13 @@ router = APIRouter(
         429: {"description": "HTTP trigger cooldown (scheduled job is not limited)"},
     },
 )
-async def trigger_news_update() -> JobTriggerResponse:
-    await news_update_guard.run_from_http(run_news_update)
+async def trigger_news_update(
+    force: bool = Query(
+        False,
+        description="If true, skip the 15-minute HTTP cooldown",
+    ),
+) -> JobTriggerResponse:
+    await news_update_guard.run_from_http(run_news_update, force=force)
     return JobTriggerResponse(
         job="news-update",
         message="News update job completed",

@@ -1,4 +1,4 @@
-"""Single-flight job runner: HTTP has a cooldown, the scheduler does not."""
+"""Single-flight job runner: HTTP has a cooldown (force skips it), the scheduler does not."""
 
 import asyncio
 import logging
@@ -30,11 +30,11 @@ class JobRunGuard:
         self._running: bool = False
         self._last_http_started_at: Optional[float] = None
 
-    async def _begin(self, *, http_trigger: bool) -> Optional[str]:
+    async def _begin(self, *, http_trigger: bool, force: bool = False) -> Optional[str]:
         async with self._lock:
             if self._running:
                 return "running"
-            if http_trigger and self._last_http_started_at is not None:
+            if http_trigger and not force and self._last_http_started_at is not None:
                 elapsed: float = time.monotonic() - self._last_http_started_at
                 if elapsed < self._http_cooldown_seconds:
                     retry_after: int = max(
@@ -55,8 +55,14 @@ class JobRunGuard:
         async with self._lock:
             self._running = False
 
-    async def run_from_http(self, job: Callable[[], Awaitable[None]]) -> None:
-        blocked: Optional[str] = await self._begin(http_trigger=True)
+    async def run_from_http(
+        self,
+        job: Callable[[], Awaitable[None]],
+        *,
+        force: bool = False,
+    ) -> None:
+        """Run the job from HTTP. force=True skips the cooldown (not single-flight)."""
+        blocked: Optional[str] = await self._begin(http_trigger=True, force=force)
         if blocked == "running":
             raise HTTPException(status.HTTP_409_CONFLICT, self._busy_detail)
         try:
