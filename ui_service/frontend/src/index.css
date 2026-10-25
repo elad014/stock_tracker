@@ -1872,8 +1872,45 @@ body {
   white-space: pre-wrap;
 }
 
-.stock-articles-panel h2 {
-  margin-bottom: 0.75rem;
+.stock-articles-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.stock-articles-header h2 {
+  margin: 0;
+}
+
+.news-day-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.news-day-field select {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #f1f5f9;
+  font-size: 0.85rem;
+}
+
+.news-day-field select:focus {
+  border-color: #38bdf8;
+  outline: none;
+}
+
+.news-day-field select option {
+  background: #1e293b;
+  color: #f1f5f9;
 }
 
 .stock-articles-list {

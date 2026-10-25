@@ -1,12 +1,13 @@
 import hashlib
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import asyncpg
 
-from constant import ARTICLE_EXTRACT_MIN_CHARS
+from constant import ARTICLE_EXTRACT_MIN_CHARS, ARTICLE_RETENTION_DAYS
 from clients.database_client import db
 
 ARTICLES_TABLE = "news_articles"
@@ -141,25 +142,164 @@ async def link_article_to_stock(
     return row is not None
 
 
+def _row_day(row: dict[str, Any]) -> date:
+    value: Any = row.get("published_at") or row.get("created_at")
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+def parse_news_day(
+    day: str | None,
+    timezone_name: str | None,
+    *,
+    today: date | None = None,
+) -> tuple[date | None, str]:
+    """Validate a chosen news day in the viewer's timezone.
+
+    An empty day means the mixed 7-day list. A specific day must fall inside
+    the retention window for that timezone.
+    """
+    tz_name: str = (timezone_name or "UTC").strip() or "UTC"
+    try:
+        zone: ZoneInfo = ZoneInfo(tz_name)
+    except Exception as exc:
+        raise ValueError("Invalid timezone") from exc
+    if day is None or not str(day).strip():
+        return None, tz_name
+    try:
+        chosen: date = date.fromisoformat(str(day).strip())
+    except ValueError as exc:
+        raise ValueError("Invalid day") from exc
+    current: date = today if today is not None else datetime.now(zone).date()
+    oldest: date = current - timedelta(days=ARTICLE_RETENTION_DAYS - 1)
+    if chosen < oldest or chosen > current:
+        raise ValueError("Day is outside the 7-day news window")
+    return chosen, tz_name
+
+
+def spread_article_ids(rows: list[dict[str, Any]], limit: int) -> list[str]:
+    """Pick up to ``limit`` ids so every day in ``rows`` stays on the page.
+
+    ``rows`` must be newest first. Each day gets an equal share of the limit.
+    Days with fewer articles give their unused slots to newer leftovers.
+    """
+    capped: int = max(0, int(limit))
+    if capped == 0 or not rows:
+        return []
+
+    by_day: dict[date, list[dict[str, Any]]] = {}
+    day_order: list[date] = []
+    for row in rows:
+        day: date = _row_day(row)
+        if day not in by_day:
+            by_day[day] = []
+            day_order.append(day)
+        by_day[day].append(row)
+
+    per_day: int = max(1, capped // len(by_day))
+    chosen: list[dict[str, Any]] = []
+    chosen_ids: set[str] = set()
+    for day in day_order:
+        if len(chosen) >= capped:
+            break
+        for row in by_day[day][:per_day]:
+            if len(chosen) >= capped:
+                break
+            article_id: str = str(row["article_id"])
+            chosen.append(row)
+            chosen_ids.add(article_id)
+
+    if len(chosen) < capped:
+        for row in rows:
+            article_id = str(row["article_id"])
+            if article_id in chosen_ids:
+                continue
+            chosen.append(row)
+            chosen_ids.add(article_id)
+            if len(chosen) >= capped:
+                break
+
+    chosen.sort(
+        key=lambda row: str(row.get("published_at") or row.get("created_at") or ""),
+        reverse=True,
+    )
+    return [str(row["article_id"]) for row in chosen]
+
+
+async def _articles_in_order(
+    article_ids: list[str],
+    conn: Optional[asyncpg.Connection] = None,
+) -> list[dict[str, Any]]:
+    if not article_ids:
+        return []
+    rows = await db.fetch_all(
+        f"""
+        SELECT {_ARTICLE_COLUMNS}
+        FROM {ARTICLES_TABLE}
+        WHERE article_id = ANY($1::uuid[])
+        """,
+        article_ids,
+        conn=conn,
+    )
+    by_id: dict[str, Any] = {str(row["article_id"]): row for row in rows}
+    ordered = [by_id[article_id] for article_id in article_ids if article_id in by_id]
+    return [_normalize_article(row) for row in ordered]
+
+
 async def list_by_stock(
     stock_id: str,
     limit: int = 10,
+    day: date | None = None,
+    timezone_name: str = "UTC",
     conn: Optional[asyncpg.Connection] = None,
 ) -> list[dict[str, Any]]:
-    rows = await db.fetch_all(
+    """Articles from the retention window.
+
+    With no day, the result is spread across the window so one busy day cannot
+    hide the rest of the week. With a day, every returned article is from that
+    calendar day in ``timezone_name``.
+    """
+    capped: int = max(1, int(limit))
+    if day is not None:
+        index_rows = await db.fetch_all(
+            f"""
+            SELECT a.article_id
+            FROM {ARTICLES_TABLE} a
+            INNER JOIN {STOCK_ARTICLES_TABLE} sa ON sa.article_id = a.article_id
+            WHERE sa.stock_id = $1::uuid
+              AND (COALESCE(a.published_at, a.created_at) AT TIME ZONE $2)::date = $3::date
+            ORDER BY a.published_at DESC NULLS LAST, a.created_at DESC
+            LIMIT $4
+            """,
+            stock_id,
+            timezone_name,
+            day,
+            capped,
+            conn=conn,
+        )
+        return await _articles_in_order(
+            [str(row["article_id"]) for row in index_rows],
+            conn=conn,
+        )
+
+    index_rows = await db.fetch_all(
         f"""
-        SELECT {_ARTICLE_COLUMNS_A}
+        SELECT a.article_id, a.published_at, a.created_at
         FROM {ARTICLES_TABLE} a
         INNER JOIN {STOCK_ARTICLES_TABLE} sa ON sa.article_id = a.article_id
         WHERE sa.stock_id = $1::uuid
+          AND COALESCE(a.published_at, a.created_at)::date
+              >= (CURRENT_DATE - ($2::int - 1))
         ORDER BY a.published_at DESC NULLS LAST, a.created_at DESC
-        LIMIT $2
         """,
         stock_id,
-        limit,
+        max(1, ARTICLE_RETENTION_DAYS),
         conn=conn,
     )
-    return [_normalize_article(row) for row in rows]
+    return await _articles_in_order(spread_article_ids(index_rows, capped), conn=conn)
 
 
 async def list_linked_stocks(

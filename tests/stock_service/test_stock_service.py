@@ -12,9 +12,11 @@ stock_models = load_backend_module("stock_service", "models.stocks")
 
 
 class FrozenDate(real_date):
+    """2026-08-31 is a Monday, so live-quote points can attach to Friday."""
+
     @classmethod
     def today(cls):
-        return cls(2026, 8, 30)
+        return cls(2026, 8, 31)
 
 
 def _quote_row(**overrides):
@@ -84,7 +86,7 @@ def test_with_today_close_appends_latest_quote(monkeypatch):
     monkeypatch.setattr(stock_service, "date", FrozenDate)
     bars = [
         stock_models.StockHistoryBar(
-            date="2026-08-29",
+            date="2026-08-28",
             open=190.0,
             high=195.0,
             low=189.0,
@@ -95,15 +97,57 @@ def test_with_today_close_appends_latest_quote(monkeypatch):
 
     result = stock_service._with_today_close(bars, _quote_row(close=200.0), None)
 
-    assert [bar.date for bar in result] == ["2026-08-29", "2026-08-30"]
+    assert [bar.date for bar in result] == ["2026-08-28", "2026-08-31"]
     assert result[-1].close == 200.0
+
+
+def test_with_today_close_does_not_bridge_missing_sessions(monkeypatch):
+    monkeypatch.setattr(stock_service, "date", FrozenDate)
+    bars = [
+        stock_models.StockHistoryBar(
+            date="2026-08-21",
+            open=190.0,
+            high=195.0,
+            low=189.0,
+            close=194.0,
+            volume=1000,
+        )
+    ]
+
+    result = stock_service._with_today_close(bars, _quote_row(close=200.0), None)
+
+    assert [bar.date for bar in result] == ["2026-08-21"]
+    assert result[-1].close == 194.0
+
+
+def test_with_today_close_skips_weekend(monkeypatch):
+    class SundayDate(real_date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 8, 30)
+
+    monkeypatch.setattr(stock_service, "date", SundayDate)
+    bars = [
+        stock_models.StockHistoryBar(
+            date="2026-08-28",
+            open=190.0,
+            high=195.0,
+            low=189.0,
+            close=194.0,
+            volume=1000,
+        )
+    ]
+
+    result = stock_service._with_today_close(bars, _quote_row(close=200.0), None)
+
+    assert [bar.date for bar in result] == ["2026-08-28"]
 
 
 def test_with_today_close_replaces_existing_today_bar(monkeypatch):
     monkeypatch.setattr(stock_service, "date", FrozenDate)
     bars = [
         stock_models.StockHistoryBar(
-            date="2026-08-30",
+            date="2026-08-31",
             open=None,
             high=198.0,
             low=190.0,

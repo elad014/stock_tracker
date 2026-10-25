@@ -76,10 +76,17 @@ async def list_stock_articles(
     stock_id: str,
     user_id: str,
     limit: int = 100,
+    day: str | None = None,
+    timezone_name: str | None = None,
 ) -> list[StockArticle]:
     """Read-only: articles are filled by news-service cron / Swagger, never by the user."""
     await _require_on_watchlist(user_id, stock_id)
-    rows = await news_service.list_stock_articles(stock_id, limit)
+    rows = await news_service.list_stock_articles(
+        stock_id,
+        limit,
+        day=day,
+        timezone_name=timezone_name,
+    )
     return [_to_article(row) for row in rows]
 
 

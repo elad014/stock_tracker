@@ -35,10 +35,14 @@ export async function fetchStockHistory(
 export async function fetchStockArticles(
   stockId: string,
   limit: number = 100,
+  day: string | null = null,
 ): Promise<StockArticle[]> {
-  const res = await api.get<StockArticle[]>(`/${stockId}/articles`, {
-    params: { limit },
-  });
+  const params: { limit: number; day?: string; timezone?: string } = { limit };
+  if (day) {
+    params.day = day;
+    params.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  }
+  const res = await api.get<StockArticle[]>(`/${stockId}/articles`, { params });
   return res.data;
 }
 

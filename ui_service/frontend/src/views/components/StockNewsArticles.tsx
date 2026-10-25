@@ -7,9 +7,17 @@ import { fetchStockArticles, summarizeStockArticle } from "../../services/stockS
 const POLL_INTERVAL_MS: number = 2000;
 const MAX_POLL_ATTEMPTS: number = 45;
 const CANNOT_EXTRACT_MESSAGE: string = "Cannot extract the article";
+const NEWS_WINDOW_DAYS: number = 7;
+const ALL_DAYS: string = "";
+const DAY_ARTICLE_LIMIT: number = 200;
 
 interface StockNewsArticlesProps {
   stockId: string;
+}
+
+interface NewsDayOption {
+  value: string;
+  label: string;
 }
 
 function formatPublishedAt(value: string | null): string {
@@ -25,6 +33,30 @@ function formatPublishedAt(value: string | null): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatIsoDate(day: Date): string {
+  const year: number = day.getFullYear();
+  const month: string = String(day.getMonth() + 1).padStart(2, "0");
+  const date: string = String(day.getDate()).padStart(2, "0");
+  return `${year}-${month}-${date}`;
+}
+
+function recentNewsDays(): NewsDayOption[] {
+  const today: Date = new Date();
+  const days: NewsDayOption[] = [];
+  for (let offset: number = 0; offset < NEWS_WINDOW_DAYS; offset += 1) {
+    const day: Date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset);
+    days.push({
+      value: formatIsoDate(day),
+      label: day.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    });
+  }
+  return days;
 }
 
 function isUnusableSummary(article: StockArticle): boolean {
@@ -43,28 +75,38 @@ export default function StockNewsArticles({
   stockId,
 }: StockNewsArticlesProps): JSX.Element | null {
   const [articles, setArticles] = useState<StockArticle[]>([]);
+  const [selectedDay, setSelectedDay] = useState<string>(ALL_DAYS);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [busyIds, setBusyIds] = useState<string[]>([]);
   const cancelledRef = useRef<boolean>(false);
+  const selectedDayRef = useRef<string>(ALL_DAYS);
+  const dayOptions: NewsDayOption[] = recentNewsDays();
+  selectedDayRef.current = selectedDay;
 
   useEffect(() => {
+    let cancelled: boolean = false;
     cancelledRef.current = false;
 
     async function loadArticles(): Promise<void> {
       setLoading(true);
       setError("");
+      setArticles([]);
       try {
-        const data: StockArticle[] = await fetchStockArticles(stockId);
-        if (!cancelledRef.current) {
+        const data: StockArticle[] = await fetchStockArticles(
+          stockId,
+          selectedDay ? DAY_ARTICLE_LIMIT : 100,
+          selectedDay || null,
+        );
+        if (!cancelled) {
           setArticles(data);
         }
       } catch {
-        if (!cancelledRef.current) {
+        if (!cancelled) {
           setError("Failed to load news articles");
         }
       } finally {
-        if (!cancelledRef.current) {
+        if (!cancelled) {
           setLoading(false);
         }
       }
@@ -72,9 +114,10 @@ export default function StockNewsArticles({
 
     void loadArticles();
     return () => {
+      cancelled = true;
       cancelledRef.current = true;
     };
-  }, [stockId]);
+  }, [stockId, selectedDay]);
 
   function replaceArticle(updated: StockArticle): void {
     setArticles((current: StockArticle[]) =>
@@ -92,7 +135,14 @@ export default function StockNewsArticles({
       if (cancelledRef.current) {
         return;
       }
-      const rows: StockArticle[] = await fetchStockArticles(stockId);
+      if (selectedDayRef.current !== selectedDay) {
+        return;
+      }
+      const rows: StockArticle[] = await fetchStockArticles(
+        stockId,
+        selectedDay ? DAY_ARTICLE_LIMIT : 100,
+        selectedDay || null,
+      );
       const match: StockArticle | undefined = rows.find(
         (item: StockArticle) => item.article_id === articleId,
       );
@@ -131,23 +181,36 @@ export default function StockNewsArticles({
     }
   }
 
-  if (loading) {
-    return (
-      <section className="dashboard-panel stock-articles-panel">
-        <h2>Latest News</h2>
-        <p className="stock-details-status">Loading news articles...</p>
-      </section>
-    );
-  }
-
-  if (!articles.length && !error) {
-    return null;
-  }
-
   return (
     <section className="dashboard-panel stock-articles-panel">
-      <h2>Latest News</h2>
+      <div className="stock-articles-header">
+        <h2>Latest News</h2>
+        <label className="news-day-field" htmlFor="news-day">
+          Day
+          <select
+            id="news-day"
+            value={selectedDay}
+            onChange={(event) => setSelectedDay(event.target.value)}
+          >
+            <option value={ALL_DAYS}>Last 7 days</option>
+            {dayOptions.map((option: NewsDayOption) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {loading ? <p className="stock-details-status">Loading news articles...</p> : null}
       {error ? <p className="control-error">{error}</p> : null}
+      {!loading && !error && articles.length === 0 ? (
+        <p className="stock-details-status">
+          {selectedDay
+            ? "No news articles for this day."
+            : "No news articles for the last 7 days."}
+        </p>
+      ) : null}
+      {!loading && articles.length > 0 ? (
       <ul className="stock-articles-list">
         {articles.map((article: StockArticle) => {
           const busy: boolean = busyIds.includes(article.article_id);
@@ -201,6 +264,7 @@ export default function StockNewsArticles({
           );
         })}
       </ul>
+      ) : null}
     </section>
   );
 }

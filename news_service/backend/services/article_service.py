@@ -245,8 +245,22 @@ async def retry_missing_article_bodies(
     return extracted
 
 
-async def list_stock_articles(stock_id: str, limit: int = 100) -> list[ArticleRecord]:
-    rows = await articles_db.list_by_stock(stock_id, limit=limit)
+async def list_stock_articles(
+    stock_id: str,
+    limit: int = 100,
+    day: str | None = None,
+    timezone_name: str | None = None,
+) -> list[ArticleRecord]:
+    try:
+        chosen, tz_name = articles_db.parse_news_day(day, timezone_name)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    rows = await articles_db.list_by_stock(
+        stock_id,
+        limit=limit,
+        day=chosen,
+        timezone_name=tz_name,
+    )
     return [_to_record(row) for row in rows]
 
 
