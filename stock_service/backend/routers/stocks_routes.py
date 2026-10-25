@@ -235,7 +235,8 @@ async def unwatch_stock_everywhere(
         "By default it still skips weekends / closed market; "
         "set force=true to run anyway (useful for testing).\n\n"
         "The weekday scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
-        "and at most once per 15 minutes, so a stolen key cannot stack Twelve Data calls."
+        "and at most once per 15 minutes. force=true also skips the 15-minute cooldown "
+        "(a run that is already in progress still returns 409)."
     ),
     response_model=JobTriggerResponse,
     responses={
@@ -246,13 +247,16 @@ async def unwatch_stock_everywhere(
 async def trigger_daily_update(
     force: bool = Query(
         False,
-        description="If true, ignore weekend and market-closed checks",
+        description=(
+            "If true, ignore weekend and market-closed checks "
+            "and skip the 15-minute HTTP cooldown"
+        ),
     ),
 ) -> JobTriggerResponse:
     async def _job() -> None:
         await run_daily_update(force=force)
 
-    await daily_update_guard.run_from_http(_job)
+    await daily_update_guard.run_from_http(_job, force=force)
     return JobTriggerResponse(
         job="daily-update",
         message="Daily update job completed" + (" (forced)" if force else ""),
@@ -267,7 +271,8 @@ async def trigger_daily_update(
         "Manually runs the cleanup job: for stocks with no watchlist entries, "
         "moves history to stock_history_archive and deletes the quote.\n\n"
         "The hourly scheduler is not rate-limited. This HTTP trigger is: one run at a time, "
-        "and at most once per 15 minutes."
+        "and at most once per 15 minutes. force=true skips the 15-minute cooldown "
+        "(a run that is already in progress still returns 409)."
     ),
     response_model=JobTriggerResponse,
     responses={
@@ -275,8 +280,13 @@ async def trigger_daily_update(
         429: {"description": "HTTP trigger cooldown (scheduled job is not limited)"},
     },
 )
-async def trigger_cleanup_archive() -> JobTriggerResponse:
-    await cleanup_archive_guard.run_from_http(run_cleanup_archive)
+async def trigger_cleanup_archive(
+    force: bool = Query(
+        False,
+        description="If true, skip the 15-minute HTTP cooldown",
+    ),
+) -> JobTriggerResponse:
+    await cleanup_archive_guard.run_from_http(run_cleanup_archive, force=force)
     return JobTriggerResponse(
         job="cleanup-archive",
         message="Cleanup/archive job completed",
