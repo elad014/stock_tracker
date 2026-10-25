@@ -102,17 +102,30 @@ def _history_start_for_range(range_key: str, today: date | None = None) -> date 
     return base - timedelta(days=days)
 
 
+def _previous_weekday(day: date) -> date:
+    cursor: date = day - timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor -= timedelta(days=1)
+    return cursor
+
+
 def _with_today_close(
     bars: list[StockHistoryBar],
     quote: dict[str, Any],
     start: date | None,
 ) -> list[StockHistoryBar]:
-    """Ensure the latest quote close appears as today's point on the chart."""
+    """Attach the live quote only when it continues the last trading session.
+
+    Calendar today on a weekend, or a quote several sessions after the last
+    stored bar, would draw one straight line across the missing days.
+    """
     close = quote.get("close")
     if close is None:
         return bars
 
     today = date.today()
+    if today.weekday() >= 5:
+        return bars
     if start is not None and today < start:
         return bars
 
@@ -143,7 +156,7 @@ def _with_today_close(
         )
         return bars
 
-    if last.date < today_str:
+    if last.date == _previous_weekday(today).isoformat():
         return [*bars, today_bar]
 
     return bars

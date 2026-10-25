@@ -29,10 +29,30 @@ async def get_stock_history(
 @router.get("/{stock_id}/articles", response_model=list[StockArticle])
 async def list_stock_articles(
     stock_id: str = Path(..., description="Stock UUID"),
-    limit: int = Query(100, ge=1, le=200, description="Max number of articles"),
+    limit: int = Query(
+        100,
+        ge=1,
+        le=200,
+        description="Max articles. Spread across 7 days unless day is set.",
+    ),
+    day: str | None = Query(
+        None,
+        description="Calendar day YYYY-MM-DD. Omit for the mixed 7-day list.",
+    ),
+    timezone_name: str | None = Query(
+        None,
+        alias="timezone",
+        description="IANA timezone for the chosen day",
+    ),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> list[StockArticle]:
-    return await stocks_service.list_stock_articles(stock_id, str(user["id"]), limit)
+    return await stocks_service.list_stock_articles(
+        stock_id,
+        str(user["id"]),
+        limit,
+        day=day,
+        timezone_name=timezone_name,
+    )
 
 
 @router.post(

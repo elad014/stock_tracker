@@ -89,12 +89,19 @@ class NewsServiceClient:
         self,
         stock_id: str,
         limit: int = 100,
+        day: str | None = None,
+        timezone_name: str | None = None,
     ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit}
+        if day:
+            params["day"] = day
+        if timezone_name:
+            params["timezone"] = timezone_name
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{self._base_url}/stocks/{stock_id}/articles",
                 headers=self._headers(),
-                params={"limit": limit},
+                params=params,
             )
         if response.status_code >= 400:
             self._raise_from_response(response)
